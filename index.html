@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>EVM Trace Debugger (P0)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+      background: linear-gradient(135deg, #0f1117 0%, #1a1d2b 100%);
+      color: #e6e6e6;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    
+    #app {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      height: 100vh;
+      gap: 1px;
+      position: relative;
+    }
+    
+    /* ---------- Left: Step List ---------- */
+    #steps {
+      background-color: #121520;
+      border-right: 1px solid #2a2f45;
+      overflow-y: auto;
+      height: 100%;
+      padding: 4px 0;
+    }
+    
+    .step {
+      padding: 10px 15px;
+      border-bottom: 1px solid #1e2230;
+      cursor: pointer;
+      font-size: 13px;
+      display: grid;
+      grid-template-columns: 40px 50px 1fr 60px;
+      gap: 8px;
+      align-items: center;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    
+    .step::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      transition: background 0.2s ease;
+    }
+    
+    .step:hover {
+      background: rgba(66, 77, 110, 0.2);
+    }
+    
+    .step:hover::before {
+      background: #4a5cff;
+    }
+    
+    .step.active {
+      background: rgba(79, 93, 147, 0.3);
+    }
+    
+    .step.active::before {
+      background: #4a5cff;
+    }
+    
+    .op {
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    
+    .jump { 
+      color: #ffd700; 
+      font-weight: bold;
+    }
+    .call { 
+      color: #00bfff; 
+      font-weight: bold;
+    }
+    .storage { 
+      color: #ff6b6b; 
+      font-weight: bold;
+    }
+    
+    .step > div:nth-child(1) {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    
+    .step > div:nth-child(2) {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    .step > div:nth-child(4) {
+      text-align: right;
+      font-weight: bold;
+      color: #a0a0c0;
+    }
+
+    /* ---------- Right: Detail ---------- */
+    #detail {
+      background-color: #121520;
+      padding: 20px;
+      overflow-y: auto;
+      height: 100%;
+    }
+    
+    .panel {
+      margin-bottom: 18px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #1a1e2d;
+      border: 1px solid #2a2f45;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .panel:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .panel h3 {
+      margin: 0;
+      padding: 10px 15px;
+      background: linear-gradient(to right, #2a3350, #353f65);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #2a2f45;
+    }
+    
+    .panel .content {
+      padding: 15px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: #161a27;
+      color: #d1d5db;
+      line-height: 1.6;
+    }
+    
+    /* ---------- Bottom: Top Ops Table ---------- */
+    #topOps {
+      margin-top: 18px;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+      background: #161a27;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    
+    th, td {
+      border: 1px solid #2a2f45;
+      padding: 8px 12px;
+      text-align: left;
+      transition: background 0.2s ease;
+    }
+    
+    th {
+      background: linear-gradient(to bottom, #2a3350, #232a42);
+      font-weight: 600;
+      color: #e2e8f0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 11px;
+    }
+    
+    tbody tr:hover {
+      background: rgba(79, 93, 147, 0.15);
+    }
+    
+    tbody tr:nth-child(even) {
+      background: rgba(30, 35, 50, 0.4);
+    }
+    
+    tbody tr:nth-child(even):hover {
+      background: rgba(79, 93, 147, 0.25);
+    }
+    
+    /* Error message styling */
+    .error-message {
+      color: #ef4444;
+      padding: 20px;
+      text-align: center;
+      font-size: 16px;
+    }
+    
+    .loading-message {
+      color: #9ca3af;
+      padding: 20px;
+      text-align: center;
+      font-size: 16px;
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #0f1117;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      #app {
+        grid-template-columns: 1fr;
+      }
+      
+      #steps {
+        max-height: 40vh;
+      }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="steps">
+    <div class="loading-message" id="loadingMessage">Loading data...</div>
+  </div>
+  <div id="detail">
+    <div class="panel">
+      <h3>Step Detail</h3>
+      <div class="content" id="stepDetail">Select a step</div>
+    </div>
+
+    <div class="panel">
+      <h3>Stack (Top)</h3>
+      <div class="content" id="stackTop"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Stack (Top 3)</h3>
+      <div class="content" id="stackTop3"></div>
+    </div>
+
+    <div class="panel" id="topOps">
+      <h3>Top Gas Ops</h3>
+      <div class="content">
+        <table id="topOpsTable">
+          <thead>
+            <tr>
+              <th>OP</th>
+              <th>Count</th>
+              <th>Gas Sum</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function main() {
+  const stepsEl = document.getElementById('steps');
+  const detailEl = document.getElementById('stepDetail');
+  const stackTopEl = document.getElementById('stackTop');
+  const stackTop3El = document.getElementById('stackTop3');
+  const topOpsBody = document.querySelector('#topOpsTable tbody');
+  const loadingMessage = document.getElementById('loadingMessage');
+
+  let activeStepEl = null;
+
+  try {
+    // 尝试获取数据
+    const response = await fetch('./parsed_trace.json');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load data: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    renderData(data);
+  } catch (error) {
+    console.error('Error loading data:', error);
+    
+    // 显示错误消息并提供模拟数据
+    stepsEl.innerHTML = `<div class="error-message">Error loading data: ${error.message}<br><br>Loading demo data instead...</div>`;
+    
+    // 使用模拟数据
+    setTimeout(() => {
+      const demoData = generateDemoData();
+      renderData(demoData);
+    }, 1500);
+  }
+
+  function renderData(data) {
+    // 清除加载/错误消息
+    if (loadingMessage) {
+      loadingMessage.style.display = 'none';
+    }
+    stepsEl.innerHTML = '';
+
+    data.rows.forEach(row => {
+      const el = document.createElement('div');
+      el.className = 'step';
+
+      if (row.isJump) el.classList.add('jump');
+      if (row.isCall) el.classList.add('call');
+      if (row.isStorage) el.classList.add('storage');
+
+      el.innerHTML = `
+        <div>#${row.step}</div>
+        <div>pc ${row.pc}</div>
+        <div class="op">${row.op}</div>
+        <div>${row.gasCost}</div>
+      `;
+
+      el.onclick = () => {
+        if (activeStepEl) activeStepEl.classList.remove('active');
+        el.classList.add('active');
+        activeStepEl = el;
+
+        detailEl.textContent =
+          `op: ${row.op}
+pc: ${row.pc}
+gas: ${row.gas}
+gasCost: ${row.gasCost}
+depth: ${row.depth}
+flags:
+  isJump: ${row.isJump}
+  isCall: ${row.isCall}
+  isStorage: ${row.isStorage}`;
+
+        stackTopEl.textContent = row.stackTop ?? '(empty)';
+        stackTop3El.textContent = row.stackTop3?.length
+          ? row.stackTop3.join('\n')
+          : '(empty)';
+      };
+
+      stepsEl.appendChild(el);
+    });
+
+    data.topOps.forEach(op => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${op.op}</td>
+        <td>${op.count}</td>
+        <td>${op.gasCostSum}</td>
+      `;
+      topOpsBody.appendChild(tr);
+    });
+  }
+
+  // 模拟数据生成函数
+  function generateDemoData() {
+    return {
+      rows: [
+        { step: 1, pc: 0, op: "PUSH1", gas: 100000, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x60", stackTop3: ["0x60", "0x00"] },
+        { step: 2, pc: 2, op: "PUSH1", gas: 99997, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x40", stackTop3: ["0x40", "0x60", "0x00"] },
+        { step: 3, pc: 4, op: "MSTORE", gas: 99994, gasCost: 12, depth: 1, isJump: false, isCall: false, isStorage: true, stackTop: "", stackTop3: [] },
+        { step: 4, pc: 5, op: "CALLVALUE", gas: 99982, gasCost: 2, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x00", stackTop3: ["0x00"] },
+        { step: 5, pc: 6, op: "DUP1", gas: 99980, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x00", stackTop3: ["0x00", "0x00"] },
+        { step: 6, pc: 7, op: "ISZERO", gas: 99977, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x01", stackTop3: ["0x01", "0x00", "0x00"] },
+        { step: 7, pc: 8, op: "PUSH2", gas: 99974, gasCost: 3, depth: 1, isJump: true, isCall: false, isStorage: false, stackTop: "0x0010", stackTop3: ["0x0010", "0x01", "0x00"] },
+        { step: 8, pc: 11, op: "JUMPI", gas: 99971, gasCost: 10, depth: 1, isJump: true, isCall: false, isStorage: false, stackTop: "", stackTop3: [] },
+        { step: 9, pc: 16, op: "PUSH1", gas: 99961, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x00", stackTop3: ["0x00"] },
+        { step: 10, pc: 18, op: "DUP1", gas: 99958, gasCost: 3, depth: 1, isJump: false, isCall: false, isStorage: false, stackTop: "0x00", stackTop3: ["0x00", "0x00"] }
+      ],
+      topOps: [
+        { op: "PUSH1", count: 15, gasCostSum: 45 },
+        { op: "DUP1", count: 8, gasCostSum: 24 },
+        { op: "SWAP1", count: 6, gasCostSum: 60 },
+        { op: "SLOAD", count: 4, gasCostSum: 8000 },
+        { op: "SSTORE", count: 3, gasCostSum: 6000 }
+      ]
+    };
+  }
+}
+
+main();
+</script>
+</body>
+</html>
