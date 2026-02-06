@@ -3,10 +3,9 @@ import fs from "fs";
 const trace = JSON.parse(fs.readFileSync("trace.json", "utf8"));
 const logs = trace.result.structLogs;
 const STORAGE_SLOT_MAP = {
-  "0x0": "x",
-  "0x00": "x",
   "0000000000000000000000000000000000000000000000000000000000000000": "x"
 };
+;
 
 
 // ===== rows =====
@@ -38,22 +37,22 @@ logs.forEach((log, idx) => {
   gasMap[log.op].gas += log.gasCost;
 
   // SSTORE decode
-  if (log.op === "SSTORE" && stack.length >= 2) {
-    const slot = stack[stack.length - 1];
-    const value = stack[stack.length - 2];
+    if (log.op === "SSTORE" && stack.length >= 2) {
+    const rawSlot = stack[stack.length - 1];
+    const rawValue = stack[stack.length - 2];
 
-    const variable =
-      slot === "0000000000000000000000000000000000000000000000000000000000000000"
-        ? "x"
-        : "x";
+    // 统一 slot 格式：32-byte hex，无 0x
+    const slot = rawSlot.padStart(64, "0");
+    const value = rawValue.padStart(64, "0");
 
     sstores.push({
       step: idx,
       slot,
       value,
-      variable
+      variable: STORAGE_SLOT_MAP[slot] || "unknown"
     });
   }
+
 
 });
 
