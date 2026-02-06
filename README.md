@@ -153,3 +153,103 @@ This project demonstrates:
      How developer tools like Remix / Tenderly are built
 
 This is a developer infrastructure / security-oriented project.
+
+
+Trace Parser (Backend)
+
+This project implements a lightweight EVM execution trace parser based on
+debug_traceTransaction from a Hardhat local node.
+
+The parser focuses on opcode-level execution analysis and serves as the
+data backend for a minimal EVM debugger UI.
+
+Parser Capabilities
+
+Parses full opcode-level execution traces (structLogs)
+
+Generates a structured step list (rows) including:
+
+execution step index
+
+program counter (pc)
+
+opcode (op)
+
+gas cost per step
+
+call depth
+
+stack top preview
+
+Aggregates gas usage by opcode (topOps)
+
+count per opcode
+
+total gas consumed per opcode
+
+Detects and decodes all SSTORE operations (sstores)
+
+extracts storage slot and written value from stack
+
+records the execution step of each storage write
+
+For the demo contract (Demo.sol):
+
+maps storage slot 0x00 to Solidity variable x
+
+Output Schema (parsed_trace.json)
+
+The parser outputs a stable JSON schema consumed by the frontend debugger UI:
+
+{
+  "rows": [
+    {
+      "step": 42,
+      "pc": 123,
+      "op": "SSTORE",
+      "gasCost": 22100,
+      "depth": 1,
+      "stackTop": ["0x00", "0x2a"]
+    }
+  ],
+  "topOps": [
+    { "op": "SSTORE", "count": 1, "gas": 22100 }
+  ],
+  "sstores": [
+    {
+      "step": 42,
+      "slot": "0x00",
+      "value": "0x2a",
+      "variable": "x"
+    }
+  ]
+}
+
+
+This schema is fixed for P0 delivery and is not expected to change.
+
+Limitations
+
+Based on Hardhat v3 local node
+
+Only the default tracer is supported
+
+custom tracers such as callTracer are not available
+
+No call tree or internal call visualization
+
+No Solidity source-level mapping
+
+Storage decoding is demo-specific and limited to known slots
+
+Educational Value
+
+This parser demonstrates:
+
+How EVM transactions execute at the opcode level
+
+How gas consumption emerges from low-level operations
+
+How storage writes (SSTORE) can be observed directly from execution traces
+
+How blockchain debugger tools structure backend trace data
