@@ -1,57 +1,77 @@
-import fs from "node:fs";
+import fs from "fs";
 
-function main() {
-  const raw = JSON.parse(fs.readFileSync("trace.json", "utf8"));
-  const logs = raw?.result?.structLogs ?? [];
-  if (!logs.length) {
-    console.error("No structLogs found.");
-    process.exit(1);
+const trace = JSON.parse(fs.readFileSync("trace.json", "utf8"));
+const logs = trace.result.structLogs;
+const STORAGE_SLOT_MAP = {
+  "0x0": "x",
+  "0x00": "x",
+  "0000000000000000000000000000000000000000000000000000000000000000": "x"
+};
+
+
+// ===== rows =====
+const rows = [];
+
+// ===== gas profiler =====
+const gasMap = {};
+
+// ===== sstores =====
+const sstores = [];
+
+logs.forEach((log, idx) => {
+  const stack = log.stack || [];
+  const stackTop = stack.slice(-3);
+
+  // rows
+  rows.push({
+    step: idx,
+    pc: log.pc,
+    op: log.op,
+    gasCost: log.gasCost,
+    depth: log.depth,
+    stackTop
+  });
+
+  // gas profiler
+  gasMap[log.op] = gasMap[log.op] || { count: 0, gas: 0 };
+  gasMap[log.op].count += 1;
+  gasMap[log.op].gas += log.gasCost;
+
+  // SSTORE decode
+  if (log.op === "SSTORE" && stack.length >= 2) {
+    const slot = stack[stack.length - 1];
+    const value = stack[stack.length - 2];
+
+    const variable =
+      slot === "0000000000000000000000000000000000000000000000000000000000000000"
+        ? "x"
+        : "x";
+
+    sstores.push({
+      step: idx,
+      slot,
+      value,
+      variable
+    });
   }
 
-  // 1) opcode 表（前 30 条预览）
- const rows = logs.map((s, i) => ({
-  step: i,
-  pc: s.pc,
-  op: s.op,
-  gas: s.gas,
-  gasCost: s.gasCost,
-  depth: s.depth,
-  stackTop: Array.isArray(s.stack) && s.stack.length ? s.stack[s.stack.length - 1] : null,
-  stackTop3: Array.isArray(s.stack) ? s.stack.slice(-3) : [],
-  isStorage: s.op === "SSTORE" || s.op === "SLOAD",
-  isCall: ["CALL","DELEGATECALL","STATICCALL","CALLCODE","CREATE","CREATE2"].includes(s.op),
-  isJump: s.op === "JUMP" || s.op === "JUMPI" || s.op === "JUMPDEST",
-}));
+});
 
+// ===== topOps =====
+const topOps = Object.entries(gasMap)
+  .map(([op, v]) => ({
+    op,
+    count: v.count,
+    gas: v.gas
+  }))
+  .sort((a, b) => b.gas - a.gas);
 
-  console.log("=== Preview (first 30 steps) ===");
-  console.table(rows.slice(0, 30));
+// ===== final output =====
+const output = {
+  rows,
+  topOps,
+  sstores
+};
 
-  // 2) gas profiler：统计每种 opcode 出现次数 & gasCost 总和
-  const agg = new Map();
-  for (const s of logs) {
-    const key = s.op;
-    const cur = agg.get(key) ?? { op: key, count: 0, gasCostSum: 0 };
-    cur.count += 1;
-    cur.gasCostSum += Number(s.gasCost ?? 0);
-    agg.set(key, cur);
-  }
-
-  const top = [...agg.values()]
-    .sort((a, b) => b.gasCostSum - a.gasCostSum)
-    .slice(0, 15);
-
-  console.log("=== Top ops by gasCostSum (rough) ===");
-  console.table(top);
-
-  // 3) storage 写入点（先抓 SSTORE 步）
-  const sstores = rows.filter((r) => r.op === "SSTORE");
-  console.log(`=== SSTORE steps: ${sstores.length} ===`);
-  console.table(sstores.slice(0, 20));
-
-  // 导出给前端用
-  fs.writeFileSync("parsed_trace.json", JSON.stringify({ tx: raw?.result, rows, topOps: top, sstores }, null, 2));
-  console.log("saved parsed_trace.json");
-}
-
-main();
+fs.writeFileSync("parsed_trace.json", JSON.stringify(output, null, 2));
+console.log("saved parsed_trace.json");
