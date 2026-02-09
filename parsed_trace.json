@@ -1,0 +1,21 @@
+{
+  "rows": [
+    { "step": 1, "pc": 0, "op": "PUSH1", "gas": 100000, "gasCost": 3, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "0x60", "stackTop3": ["0x60", "0x00"] },
+    { "step": 2, "pc": 2, "op": "PUSH1", "gas": 99997, "gasCost": 3, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "0x40", "stackTop3": ["0x40", "0x60", "0x00"] },
+    { "step": 3, "pc": 4, "op": "MSTORE", "gas": 99994, "gasCost": 12, "depth": 1, "isJump": false, "isCall": false, "isStorage": true, "stackTop": "", "stackTop3": [] },
+    { "step": 4, "pc": 5, "op": "CALLVALUE", "gas": 99982, "gasCost": 2, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "0x00", "stackTop3": ["0x00"] },
+    { "step": 5, "pc": 6, "op": "DUP1", "gas": 99980, "gasCost": 3, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "0x00", "stackTop3": ["0x00", "0x00"] },
+    { "step": 6, "pc": 7, "op": "ISZERO", "gas": 99977, "gasCost": 3, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "0x01", "stackTop3": ["0x01", "0x00", "0x00"] },
+    { "step": 7, "pc": 8, "op": "PUSH2", "gas": 99974, "gasCost": 3, "depth": 1, "isJump": true, "isCall": false, "isStorage": false, "stackTop": "0x0010", "stackTop3": ["0x0010", "0x01", "0x00"] },
+    { "step": 8, "pc": 11, "op": "JUMPI", "gas": 99971, "gasCost": 10, "depth": 1, "isJump": true, "isCall": false, "isStorage": false, "stackTop": "", "stackTop3": [] },
+    { "step": 9, "pc": 16, "op": "SSTORE", "gas": 99961, "gasCost": 5000, "depth": 1, "isJump": false, "isCall": false, "isStorage": true, "stackTop": "0x00", "stackTop3": ["0x01"] },
+    { "step": 10, "pc": 18, "op": "RETURN", "gas": 94961, "gasCost": 0, "depth": 1, "isJump": false, "isCall": false, "isStorage": false, "stackTop": "", "stackTop3": [] }
+  ],
+  "topOps": [
+    { "op": "PUSH1", "count": 4, "gasCostSum": 12 },
+    { "op": "DUP1", "count": 2, "gasCostSum": 6 },
+    { "op": "ISZERO", "count": 1, "gasCostSum": 3 },
+    { "op": "SSTORE", "count": 1, "gasCostSum": 5000 },
+    { "op": "RETURN", "count": 1, "gasCostSum": 0 }
+  ]
+}
