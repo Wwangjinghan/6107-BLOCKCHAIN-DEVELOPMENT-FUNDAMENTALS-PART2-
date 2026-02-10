@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EVM Trace Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Fira Code', monospace;
+            background: linear-gradient(135deg, #0f1117 0%, #1a1d2b 100%);
+            color: #e6e6e6;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .panel {
+            background: #1a1e2d;
+            border: 1px solid #2a2f45;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .panel h2 {
+            padding: 12px 16px;
+            background: linear-gradient(to right, #2a3350, #353f65);
+            font-size: 16px;
+            font-weight: 600;
+            border-bottom: 1px solid #2a2f45;
+        }
+
+        .panel .content {
+            padding: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 14px;
+            background: #161a27;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        th, td {
+            border: 1px solid #2a2f45;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        th {
+            background: linear-gradient(to bottom, #2a3350, #232a42);
+            font-weight: 600;
+            color: #e2e8f0;
+            font-size: 13px;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(30,35,50,0.4);
+        }
+
+        tbody tr:hover {
+            background: rgba(79,93,147,0.2);
+        }
+
+        canvas {
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            #app {
+                padding: 10px;
+            }
+            .panel h2 { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <h1>EVM Trace Dashboard</h1>
+
+    <div class="panel">
+        <h2>Top Gas Consuming Operations</h2>
+        <div class="content">
+            <canvas id="topOpsChart" height="150"></canvas>
+            <table id="topOpsTable">
+                <thead>
+                <tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>All SSTORE Changes</h2>
+        <div class="content">
+            <table id="storageDiffTable">
+                <thead>
+                <tr><th>Step</th><th>Slot</th><th>Old Value</th><th>New Value</th><th>Op</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    async function main() {
+        const topOpsBody = document.querySelector('#topOpsTable tbody');
+        const storageBody = document.querySelector('#storageDiffTable tbody');
+        const ctx = document.getElementById('topOpsChart').getContext('2d');
+
+        const res = await fetch('./parsed_trace.json');
+        const data = await res.json();
+
+        // ---------- Top Ops Table ----------
+        const gasMap = {};
+        data.rows.forEach(r => {
+            gasMap[r.op] = (gasMap[r.op] || 0) + (r.gasCost || 0);
+        });
+
+        data.topOps.forEach(op => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${op.op}</td><td>${op.count}</td><td>${op.gasCostSum}</td>`;
+            topOpsBody.appendChild(tr);
+        });
+
+        // ---------- Top Ops Chart ----------
+        const labels = data.topOps.map(o => o.op);
+        const counts = data.topOps.map(o => o.count);
+        const colors = ['#4a5cff', '#ff6b6b', '#ffd700', '#00bfff', '#8b5cf6'];
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Count',
+                    data: counts,
+                    backgroundColor: colors.slice(0, counts.length),
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const op = ctx.label;
+                                const count = ctx.raw;
+                                const gas = gasMap[op] || 0;
+                                return `OP: ${op} | Count: ${count} | Gas: ${gas}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // ---------- Storage Diff Table ----------
+        const prevStorage = {};
+        data.rows.forEach(row => {
+            if (!row.isStorage) return;
+            const slot = row.storageSlotName || row.stackTop || '0x0';
+            const oldVal = prevStorage[slot] || '0x0';
+            const newVal = row.stackTop || oldVal;
+            if (oldVal !== newVal) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${row.step}</td><td>${slot}</td><td>${oldVal}</td><td>${newVal}</td><td>${row.op}</td>`;
+                storageBody.appendChild(tr);
+                prevStorage[slot] = newVal;
+            }
+        });
+    }
+
+    main();
+</script>
+</body>
+</html>
