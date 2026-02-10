@@ -7,13 +7,13 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Fira Code', monospace;
-            background: #1a1a1a;
-            color: #ce9a6a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Ubuntu', sans-serif;
+            background: #1f1f23;
+            color: #8a9199;
             min-height: 100vh;
             line-height: 1.6;
             font-size: 14px;
-            font-weight: 900;
+            font-weight: 400;
             text-align: center;
         }
 
@@ -27,8 +27,8 @@
         #dashboardBtn {
             grid-column: span 3;
             justify-self: center;
-            background-color: #ce9a6a;
-            color: #1a1a1a;
+            background-color: #6b7a89;
+            color: #f5f7f9;
             border: none;
             padding: 10px 18px;
             border-radius: 8px;
@@ -37,10 +37,10 @@
             margin-bottom: 10px;
             transition: background 0.2s;
         }
-        #dashboardBtn:hover { background-color: #e6b573; }
+        #dashboardBtn:hover { background-color: #7a8a9a; }
 
         #steps {
-            background: #333333;
+            background: #29292f;
             border-radius: 12px;
             padding: 12px;
             box-shadow: 0 6px 15px rgba(0,0,0,0.3);
@@ -57,16 +57,16 @@
             gap: 10px;
             cursor: pointer;
             transition: all 0.15s;
-            background: #222222;
+            background: #26262c;
             border-left: 4px solid transparent;
             font-weight: 900;
             text-align: center;
         }
 
-        .step.active { border-left: 4px solid #ce9a6a; background: #444444; transform: scale(1.02); }
-        .step:hover { background: #555555; }
-        .jump { color: #ff8c42; font-weight: 700; }
-        .storage { color: #ff4b4b; font-weight: 700; }
+        .step.active { border-left: 4px solid #7a8a9a; background: #31313a; transform: scale(1.02); }
+        .step:hover { background: #34343d; }
+        .jump { color: #8a9f7a; font-weight: 700; }
+        .storage { color: #9a7a8a; font-weight: 700; }
 
         #detail {
             display: flex;
@@ -75,33 +75,33 @@
         }
 
         .panel {
-            background: #222222;
+            background: #26262c;
             border-radius: 12px;
             box-shadow: 0 6px 12px rgba(0,0,0,0.3);
             overflow: hidden;
-            border: 1px solid #444444;
+            border: 1px solid #3a3a42;
             text-align: center;
             font-weight: 700;
         }
 
         .panel h3 {
-            background: #ce9a6a;
-            color: #1a1a1a;
+            background: #6b7a89;
+            color: #f5f7f9;
             padding: 14px 18px;
             font-size: 16px;
             font-weight: 900;
         }
 
-        .panel .subtext { font-size: 12px; color: #e6e6e6; margin-top: 6px; }
-        .panel .content { padding: 16px 18px; font-size: 14px; color: #ce9a6a; white-space: pre-wrap; }
+        .panel .subtext { font-size: 12px; color: #a8adb5; margin-top: 6px; }
+        .panel .content { padding: 16px 18px; font-size: 14px; color: #8a9199; white-space: pre-wrap; }
 
-        table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 8px; overflow: hidden; font-size: 13px; }
-        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #444444; color: #ce9a6a; font-weight: 900; }
-        th { background: #ce9a6a; color: #1a1a1a; font-size: 13px; }
-        tbody tr:nth-child(even) { background: #333333; }
-        tbody tr:hover { background: #555555; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 8px; overflow: hidden; font-size: 14px; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #3a3a42; color: #8a9199; font-weight: 600; }
+        th { background: #6b7a89; color: #f5f7f9; font-size: 13px; }
+        tbody tr:nth-child(even) { background: #29292f; }
+        tbody tr:hover { background: #31313a; }
 
-        canvas { max-width: 100%; margin-bottom: 16px; border-radius: 6px; background: #222222; padding: 6px; }
+        canvas { max-width: 100%; margin-bottom: 16px; border-radius: 6px; background: #26262c; padding: 6px; }
 
         @media (max-width: 1200px) { #app { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 768px) { #app { grid-template-columns: 1fr; } }
@@ -149,11 +149,11 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     const barColors = [
-        '#d97e3b', // 橙褐
-        '#c75a3c', // 红褐
-        '#a63e3f', // 深红
-        '#8b2e3f', // 暗红
-        '#6f1f3f', // 酒红
+        '#6b7a89', // 灰蓝
+        '#6b8074', // 灰绿
+        '#7a6989', // 灰紫
+        '#8a7567', // 灰棕
+        '#6b8685', // 灰蓝绿
     ];
     document.getElementById('dashboardBtn').onclick = () => { window.location.href = './dashboard.html'; };
 
