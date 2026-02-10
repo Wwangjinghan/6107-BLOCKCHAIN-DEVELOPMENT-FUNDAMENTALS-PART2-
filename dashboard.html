@@ -8,8 +8,8 @@
 
         body {
             font-family: 'Fira Code', monospace;
-            background: linear-gradient(135deg, #0f1117 0%, #1a1d2b 100%);
-            color: #e6e6e6;
+            background: #1a1a1a; /* 黑色背景 */
+            color: #ce9a6a;
             line-height: 1.5;
             min-height: 100vh;
         }
@@ -23,28 +23,71 @@
 
         h1 {
             text-align: center;
-            font-weight: 600;
+            font-weight: 700;
+            color: #ce9a6a;
             margin-bottom: 10px;
         }
 
-        .panel {
-            background: #1a1e2d;
-            border: 1px solid #2a2f45;
+        /* ---------- Return Button ---------- */
+        #backBtn {
+            align-self: flex-start;
+            background-color: #ce9a6a;
+            color: #1a1a1a;
+            border: none;
+            padding: 8px 16px;
             border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        #backBtn:hover { background-color: #e6b573; }
+
+        /* ---------- Layout ---------- */
+        #dashboardContainer {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 120px); /* 留出标题和按钮空间 */
+        }
+
+        #tablesPanel {
+            flex: 1; /* 左边表格占比 */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto; /* 左边表格滚动 */
+        }
+
+        #chartPanel {
+            flex: 1; /* 右边柱状图占比 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .panel {
+            background: #222222;
+            border: 1px solid #444444;
+            border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
 
         .panel h2 {
             padding: 12px 16px;
-            background: linear-gradient(to right, #2a3350, #353f65);
+            background: #ce9a6a;
             font-size: 16px;
-            font-weight: 600;
-            border-bottom: 1px solid #2a2f45;
+            font-weight: 700;
+            color: #1a1a1a;
+            border-bottom: 1px solid #e6b573;
         }
 
         .panel .content {
             padding: 16px;
+            flex: 1;
         }
 
         table {
@@ -52,42 +95,41 @@
             border-collapse: separate;
             border-spacing: 0;
             font-size: 14px;
-            background: #161a27;
+            background: #222222;
             border-radius: 6px;
             overflow: hidden;
         }
 
         th, td {
-            border: 1px solid #2a2f45;
+            border: 1px solid #444444;
             padding: 8px 12px;
             text-align: left;
+            color: #ce9a6a;
         }
 
         th {
-            background: linear-gradient(to bottom, #2a3350, #232a42);
-            font-weight: 600;
-            color: #e2e8f0;
+            background: #ce9a6a;
+            font-weight: 700;
+            color: #1a1a1a;
             font-size: 13px;
         }
 
-        tbody tr:nth-child(even) {
-            background: rgba(30,35,50,0.4);
-        }
-
-        tbody tr:hover {
-            background: rgba(79,93,147,0.2);
-        }
+        tbody tr:nth-child(even) { background: #2a2a2a; }
+        tbody tr:hover { background: #3a3a3a; }
 
         canvas {
-            max-width: 100%;
-            margin-bottom: 20px;
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 6px;
+            background: #222222;
         }
 
         @media (max-width: 768px) {
-            #app {
-                padding: 10px;
+            #dashboardContainer {
+                flex-direction: column;
+                height: auto;
             }
-            .panel h2 { font-size: 14px; }
+            canvas { height: 250px !important; }
         }
     </style>
 </head>
@@ -96,34 +138,62 @@
 <div id="app">
     <h1>EVM Trace Dashboard</h1>
 
-    <div class="panel">
-        <h2>Top Gas Consuming Operations</h2>
-        <div class="content">
-            <canvas id="topOpsChart" height="150"></canvas>
-            <table id="topOpsTable">
-                <thead>
-                <tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+    <!-- Return Button -->
+    <button id="backBtn">← Back to Index</button>
 
-    <div class="panel">
-        <h2>All SSTORE Changes</h2>
-        <div class="content">
-            <table id="storageDiffTable">
-                <thead>
-                <tr><th>Step</th><th>Slot</th><th>Old Value</th><th>New Value</th><th>Op</th></tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+    <div id="dashboardContainer">
+        <!-- 左边表格 -->
+        <div id="tablesPanel">
+            <div class="panel">
+                <h2>Top Gas Consuming Operations</h2>
+                <div class="content">
+                    <table id="topOpsTable">
+                        <thead>
+                        <tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>All SSTORE Changes</h2>
+                <div class="content">
+                    <table id="storageDiffTable">
+                        <thead>
+                        <tr><th>Step</th><th>Slot</th><th>Old Value</th><th>New Value</th><th>Op</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右边柱状图 -->
+        <div id="chartPanel">
+            <div class="panel">
+                <h2>Top Gas Consuming Operations Chart</h2>
+                <div class="content">
+                    <canvas id="topOpsChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    const barColors = [
+        '#d97e3b', // 橙褐
+        '#c75a3c', // 红褐
+        '#a63e3f', // 深红
+        '#8b2e3f', // 暗红
+        '#6f1f3f', // 酒红
+    ];
+    document.getElementById('backBtn').onclick = () => {
+        window.location.href = './index.html';
+    };
+
     async function main() {
         const topOpsBody = document.querySelector('#topOpsTable tbody');
         const storageBody = document.querySelector('#storageDiffTable tbody');
@@ -134,9 +204,7 @@
 
         // ---------- Top Ops Table ----------
         const gasMap = {};
-        data.rows.forEach(r => {
-            gasMap[r.op] = (gasMap[r.op] || 0) + (r.gasCost || 0);
-        });
+        data.rows.forEach(r => { gasMap[r.op] = (gasMap[r.op] || 0) + (r.gasCost || 0); });
 
         data.topOps.forEach(op => {
             const tr = document.createElement('tr');
@@ -147,7 +215,16 @@
         // ---------- Top Ops Chart ----------
         const labels = data.topOps.map(o => o.op);
         const counts = data.topOps.map(o => o.count);
-        const colors = ['#4a5cff', '#ff6b6b', '#ffd700', '#00bfff', '#8b5cf6'];
+
+        const baseColor = [206,154,106];
+        const colors = counts.map((_, i) => {
+            const factor = 1 - i*0.1;
+            const r = Math.round(baseColor[0]*factor);
+            const g = Math.round(baseColor[1]*factor);
+            const b = Math.round(baseColor[2]*factor);
+            return `rgb(${r},${g},${b})`;
+        });
+
         new Chart(ctx, {
             type: 'bar',
             data: {
@@ -155,12 +232,15 @@
                 datasets: [{
                     label: 'Count',
                     data: counts,
-                    backgroundColor: colors.slice(0, counts.length),
-                    borderRadius: 6
+                    backgroundColor: barColors,
+                    borderRadius: 6,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.7
                 }]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -174,25 +254,22 @@
                         }
                     }
                 },
-                scales: {
-                    y: { beginAtZero: true }
-                }
+                scales: { y: { beginAtZero: true } }
             }
         });
 
         // ---------- Storage Diff Table ----------
+        storageBody.innerHTML = '';
         const prevStorage = {};
         data.rows.forEach(row => {
             if (!row.isStorage) return;
-            const slot = row.storageSlotName || row.stackTop || '0x0';
-            const oldVal = prevStorage[slot] || '0x0';
-            const newVal = row.stackTop || oldVal;
-            if (oldVal !== newVal) {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${row.step}</td><td>${slot}</td><td>${oldVal}</td><td>${newVal}</td><td>${row.op}</td>`;
-                storageBody.appendChild(tr);
-                prevStorage[slot] = newVal;
-            }
+            const slot = row.storageSlotName || '0x0';
+            const oldVal = prevStorage[slot] !== undefined ? prevStorage[slot] : '0x0';
+            const newVal = row.stackTop !== undefined && row.stackTop !== '' ? row.stackTop : '(empty)';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${row.step}</td><td>${slot}</td><td>${oldVal}</td><td>${newVal}</td><td>${row.op}</td>`;
+            storageBody.appendChild(tr);
+            prevStorage[slot] = newVal;
         });
     }
 

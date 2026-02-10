@@ -1,124 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>EVM Trace Debugger (P0 + P1)</title>
+    <meta charset="UTF-8">
+    <title>EVM Trace Debugger - Modern Layout</title>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            margin: 0;
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-            background: linear-gradient(135deg, #0f1117 0%, #1a1d2b 100%);
-            color: #e6e6e6;
-            line-height: 1.5;
+            font-family: 'Fira Code', monospace;
+            background: #1a1a1a;
+            color: #ce9a6a;
             min-height: 100vh;
+            line-height: 1.6;
+            font-size: 14px;
+            font-weight: 900;
+            text-align: center;
         }
+
         #app {
             display: grid;
-            grid-template-columns: 420px 1fr;
-            height: 100vh;
-            gap: 1px;
+            grid-template-columns: 280px 1fr 450px;
+            gap: 20px;
+            padding: 20px;
         }
-        #steps {
-            background-color: #121520;
-            border-right: 1px solid #2a2f45;
-            overflow-y: auto;
-            padding: 4px 0;
-        }
-        .step {
-            padding: 10px 15px;
-            border-bottom: 1px solid #1e2230;
+
+        #dashboardBtn {
+            grid-column: span 3;
+            justify-self: center;
+            background-color: #ce9a6a;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 13px;
+            font-weight: 900;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        #dashboardBtn:hover { background-color: #e6b573; }
+
+        #steps {
+            background: #333333;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .step {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 10px;
             display: grid;
             grid-template-columns: 40px 50px 1fr 60px;
-            gap: 8px;
-            align-items: center;
-            position: relative;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: #222222;
+            border-left: 4px solid transparent;
+            font-weight: 900;
+            text-align: center;
         }
-        .step:hover { background: rgba(66,77,110,0.2); }
-        .step.active { background: rgba(79,93,147,0.3); }
-        .jump { color: #ffd700; }
-        .storage { color: #ff6b6b; }
 
-        #detail { background-color: #121520; padding: 20px; overflow-y: auto; }
+        .step.active { border-left: 4px solid #ce9a6a; background: #444444; transform: scale(1.02); }
+        .step:hover { background: #555555; }
+        .jump { color: #ff8c42; font-weight: 700; }
+        .storage { color: #ff4b4b; font-weight: 700; }
+
+        #detail {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
 
         .panel {
-            margin-bottom: 16px;
-            background: #1a1e2d;
-            border: 1px solid #2a2f45;
-            border-radius: 6px;
+            background: #222222;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
             overflow: hidden;
+            border: 1px solid #444444;
+            text-align: center;
+            font-weight: 700;
         }
+
         .panel h3 {
-            margin: 0;
-            padding: 10px 15px;
-            background: #2a3350;
-            font-size: 14px;
+            background: #ce9a6a;
+            color: #1a1a1a;
+            padding: 14px 18px;
+            font-size: 16px;
+            font-weight: 900;
         }
-        .panel .content {
-            padding: 12px 15px;
-            background: #161a27;
-            font-size: 13px;
-            white-space: pre-wrap;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        th, td {
-            border: 1px solid #2a2f45;
-            padding: 6px 10px;
-        }
-        th { background: #2a3350; }
+
+        .panel .subtext { font-size: 12px; color: #e6e6e6; margin-top: 6px; }
+        .panel .content { padding: 16px 18px; font-size: 14px; color: #ce9a6a; white-space: pre-wrap; }
+
+        table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 8px; overflow: hidden; font-size: 13px; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #444444; color: #ce9a6a; font-weight: 900; }
+        th { background: #ce9a6a; color: #1a1a1a; font-size: 13px; }
+        tbody tr:nth-child(even) { background: #333333; }
+        tbody tr:hover { background: #555555; }
+
+        canvas { max-width: 100%; margin-bottom: 16px; border-radius: 6px; background: #222222; padding: 6px; }
+
+        @media (max-width: 1200px) { #app { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 768px) { #app { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
-<div style="
-  padding:8px 12px;
-  background:#020617;
-  border-bottom:1px solid #1e293b;
-  text-align:right;
-">
-    <button onclick="location.href='dashboard.html'"
-            style="
-      padding:6px 12px;
-      background:#2563eb;
-      border:none;
-      border-radius:6px;
-      color:white;
-      cursor:pointer;
-    ">
-        📊 Global Dashboard
-    </button>
-</div>
+
 <div id="app">
+    <button id="dashboardBtn">Open Global Dashboard</button>
     <div id="steps"></div>
+
     <div id="detail">
         <div class="panel">
-            <h3>Step Detail</h3>
+            <h3>Step Details</h3>
+            <div class="subtext">Click a step to view its execution info</div>
             <div class="content" id="stepDetail">Select a step</div>
         </div>
-
         <div class="panel">
             <h3>Stack Top</h3>
+            <div class="subtext">Top item on the stack for this step</div>
             <div class="content" id="stackTop"></div>
         </div>
-
         <div class="panel">
             <h3>Stack Top 3</h3>
+            <div class="subtext">Top 3 items on the stack</div>
             <div class="content" id="stackTop3"></div>
         </div>
+    </div>
 
+    <div id="detail-right">
         <div class="panel">
             <h3>Top Gas Ops</h3>
+            <div class="subtext">Most frequent ops by gas usage</div>
             <div class="content">
-                <canvas id="topOpsChart" height="140"></canvas>
+                <canvas id="topOpsChart" height="180"></canvas>
                 <table id="topOpsTable">
-                    <thead>
-                    <tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr>
-                    </thead>
+                    <thead><tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -128,6 +148,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    const barColors = [
+        '#d97e3b', // 橙褐
+        '#c75a3c', // 红褐
+        '#a63e3f', // 深红
+        '#8b2e3f', // 暗红
+        '#6f1f3f', // 酒红
+    ];
+    document.getElementById('dashboardBtn').onclick = () => { window.location.href = './dashboard.html'; };
+
     async function main() {
         const stepsEl = document.getElementById('steps');
         const detailEl = document.getElementById('stepDetail');
@@ -136,10 +165,7 @@
         const topOpsBody = document.querySelector('#topOpsTable tbody');
         const ctx = document.getElementById('topOpsChart').getContext('2d');
 
-        let chart;
-        let allRows = [];
-        let gasMap = {};
-
+        let chart, allRows = [], gasMap = {};
         const res = await fetch('./parsed_trace.json');
         const data = await res.json();
         allRows = data.rows;
@@ -155,14 +181,7 @@
                 el.className = 'step';
                 if (row.isJump) el.classList.add('jump');
                 if (row.isStorage) el.classList.add('storage');
-
-                el.innerHTML = `
-              <div>#${row.step}</div>
-              <div>pc ${row.pc}</div>
-              <div>${row.op}</div>
-              <div>${row.gasCost}</div>
-            `;
-
+                el.innerHTML = `<div>#${row.step}</div><div>pc ${row.pc}</div><div>${row.op}</div><div>${row.gasCost}</div>`;
                 el.onclick = () => selectStep(row, el);
                 stepsEl.appendChild(el);
             });
@@ -173,26 +192,20 @@
                 topOpsBody.appendChild(tr);
             });
 
+            // 使用更丰富的橙-红棕色系
+            const gradientColors = ['#ce9a6a','#d18b5c','#d36f4f','#c95c42','#b94a36'];
             chart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: [], datasets: [{ label: 'Count', data: [], backgroundColor: '#4a5cff' }] },
-                options: {
-                    responsive: true,
-                    animation: { duration: 500 },
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => {
-                                    const op = ctx.label;
-                                    const count = ctx.raw;
-                                    const gas = gasMap[op] || 0;
-                                    return `OP: ${op} | Count: ${count} | Gas: ${gas}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: { y: { beginAtZero: true } }
-                }
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Count',
+                        data: [],
+                        backgroundColor: barColors,
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
             });
         }
 
@@ -200,29 +213,20 @@
             document.querySelectorAll('.step').forEach(e => e.classList.remove('active'));
             el.classList.add('active');
 
-            detailEl.textContent =
-                `op: ${row.op}
-pc: ${row.pc}
-gas: ${row.gas}
-gasCost: ${row.gasCost}
-depth: ${row.depth}`;
-
+            detailEl.textContent = `op: ${row.op}\npc: ${row.pc}\ngas: ${row.gas}\ngasCost: ${row.gasCost}\ndepth: ${row.depth}`;
             stackTopEl.textContent = row.stackTop ?? '(empty)';
             stackTop3El.textContent = row.stackTop3?.join('\n') ?? '(empty)';
 
-            const counts = {};
-            gasMap = {};
+            const counts = {}; gasMap = {};
+            allRows.slice(0,row.step).forEach(r => { counts[r.op]=(counts[r.op]||0)+1; gasMap[r.op]=(gasMap[r.op]||0)+r.gasCost; });
 
-            allRows.slice(0, row.step).forEach(r => {
-                counts[r.op] = (counts[r.op] || 0) + 1;
-                gasMap[r.op] = (gasMap[r.op] || 0) + r.gasCost;
-            });
-
-            const top5 = Object.entries(counts)
-                .sort((a,b)=>b[1]-a[1])
-                .slice(0,5);
-
+            const top5 = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
             chart.data.labels = top5.map(v=>v[0]);
+
+            // 每根柱子用不同橙-红棕色
+            const gradientColors = ['#ce9a6a','#d18b5c','#d36f4f','#c95c42','#b94a36'];
+            chart.data.datasets[0].backgroundColor = top5.map((_, i) => barColors[i % barColors.length]);
+
             chart.data.datasets[0].data = top5.map(v=>v[1]);
             chart.update();
         }
