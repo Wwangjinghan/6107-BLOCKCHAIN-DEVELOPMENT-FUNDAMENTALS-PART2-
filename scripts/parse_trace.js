@@ -1,93 +1,196 @@
 const fs = require('fs');
 const path = require('path');
+const { ethers } = require('ethers');
 
-function hexToDecimal(hex) {
-    if (!hex) return '0';
-    return BigInt(hex).toString(10);
-}
+// ====== 配置 ======
+const RPC_URL = "http://127.0.0.1:8545";
+const provider = new ethers.JsonRpcProvider(RPC_URL);
 
+// ERC20 Transfer 事件 topic
+const TRANSFER_TOPIC =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+// ====== 工具函数 ======
 function normalizeSlot(slot) {
-    const clean = slot?.startsWith('0x') ? slot.slice(2) : slot ?? '';
-    return clean.padStart(64, '0');
+  if (!slot) return ''.padStart(64, '0');
+  const clean = slot.startsWith('0x') ? slot.slice(2) : slot;
+  return clean.padStart(64, '0');
 }
 
-// 示例 slot -> name 映射，可根据实际合约扩展
-const STORAGE_NAMES = {
-    '0000000000000000000000000000000000000000000000000000000000000000': 'slot0',
-    '0000000000000000000000000000000000000000000000000000000000000001': 'slot1',
-};
+async function parseTrace() {
+  const traceFile = path.join(__dirname, '../trace.json');
+  const outFile = path.join(__dirname, '../parsed_trace.json');
 
-function parseTrace() {
-    const traceFile = path.join(__dirname, '../trace.json');
-    const outFile = path.join(__dirname, '../parsed_trace.json');
+  if (!fs.existsSync(traceFile)) {
+    console.error('trace.json not found');
+    process.exit(1);
+  }
 
-    if (!fs.existsSync(traceFile)) {
-        console.error('❌ trace.json not found!');
-        process.exit(1);
+  const trace = JSON.parse(fs.readFileSync(traceFile, 'utf-8'));
+  const structLogs =
+    trace.result?.structLogs ||
+    trace.tx?.structLogs ||
+    [];
+
+  const txHash = trace.tx?.hash || trace.hash;
+  if (!txHash) {
+    console.error("❌ tx hash not found in trace.json");
+    process.exit(1);
+  }
+
+  const receipt = await provider.getTransactionReceipt(txHash);
+  const tx = await provider.getTransaction(txHash);
+
+  const blockNumber = receipt.blockNumber;
+  const contractAddress = receipt.to;
+
+  const rows = [];
+  const sstores = [];
+  const storageDiff = [];
+  const transfers = [];
+  const balanceChanges = [];
+
+  const opCounts = {};
+  const opGas = {};
+
+  // ======================
+  // Trace 解析
+  // ======================
+  structLogs.forEach((log, index) => {
+    const op = log.op || 'UNKNOWN';
+
+    opCounts[op] = (opCounts[op] || 0) + 1;
+    opGas[op] = (opGas[op] || 0) + (log.gasCost || 0);
+
+    const stack = log.stack || [];
+
+    const isStorage = op === 'SSTORE';
+
+    if (isStorage && stack.length >= 2) {
+      const valueHex = stack[stack.length - 2];
+      const slotHex = stack[stack.length - 1];
+
+      const slotNorm = normalizeSlot(slotHex);
+      const valueNorm = normalizeSlot(valueHex);
+
+      sstores.push({
+        step: index + 1,
+        slot: slotNorm,
+        value: valueNorm,
+        variable: slotNorm
+      });
     }
 
-    const trace = JSON.parse(fs.readFileSync(traceFile, 'utf-8'));
-    const structLogs = trace.tx?.structLogs || [];
-
-    const rows = [];
-    const opCounts = {};
-
-    structLogs.forEach((log, index) => {
-        const op = log.op;
-        opCounts[op] = (opCounts[op] || 0) + 1;
-
-        // gasCost 默认 0
-        const gasCost = log.gasCost ?? 0;
-
-        // 取栈顶和 Top3
-        const stackTop = log.stack?.[log.stack.length - 1] ?? '';
-        const stackTop3 = log.stack?.slice(-3).reverse() ?? [];
-
-        // 判断是否操作存储
-        const isStorage = op === 'SSTORE' || op === 'SLOAD';
-
-        // Storage slot mapping
-        let storageSlotName = '';
-        if (isStorage && log.stack?.length > 0) {
-            const slotHex = log.stack[log.stack.length - (op === 'SSTORE' ? 2 : 1)];
-            const slotNorm = normalizeSlot(slotHex);
-            storageSlotName = STORAGE_NAMES[slotNorm] ?? slotNorm;
-        }
-
-        rows.push({
-            step: index + 1,
-            pc: log.pc ?? 0,
-            op,
-            gas: log.gas ?? 0,
-            gasCost,
-            depth: log.depth ?? 0,
-            isJump: op.startsWith('JUMP'),
-            isCall: op.includes('CALL'),
-            isStorage,
-            stackTop,
-            stackTop3,
-            storageSlotName,
-        });
+    rows.push({
+      step: index + 1,
+      pc: log.pc ?? 0,
+      op,
+      gas: log.gas ?? 0,
+      gasCost: log.gasCost ?? 0,
+      depth: log.depth ?? 0,
+      isJump: op.startsWith('JUMP'),
+      isCall: op.includes('CALL'),
+      isStorage,
+      stackTop: stack[stack.length - 1] ?? '',
+      stackTop3: stack.slice(-3).reverse()
     });
+  });
 
-    // topOps 排序：先按 count 再按 gasCostSum
-    const topOps = Object.entries(opCounts)
-        .map(([op, count]) => {
-            const gasCostSum = rows
-                .filter(r => r.op === op)
-                .reduce((acc, r) => acc + (r.gasCost ?? 0), 0);
-            return { op, count, gasCostSum };
-        })
-        .sort((a, b) => {
-            if (b.count !== a.count) return b.count - a.count;
-            return b.gasCostSum - a.gasCostSum;
-        })
-        .slice(0, 10);
+  // ======================
+  // 真正 Storage Diff
+  // ======================
+  for (const s of sstores) {
+    const slotHex = "0x" + s.slot;
 
-    // 输出 parsed_trace.json
-    fs.writeFileSync(outFile, JSON.stringify({ rows, topOps }, null, 2), 'utf-8');
+    const before = await provider.getStorage(
+      contractAddress,
+      slotHex,
+      blockNumber - 1
+    );
 
-    console.log(`✓ parsed_trace.json generated with ${rows.length} rows`);
+    const after = await provider.getStorage(
+      contractAddress,
+      slotHex,
+      blockNumber
+    );
+
+    storageDiff.push({
+      slot: s.slot,
+      variable: s.variable,
+      before,
+      after
+    });
+  }
+
+  // ======================
+  // Balance Changes
+  // ======================
+  const fromBefore = await provider.getBalance(tx.from, blockNumber - 1);
+  const fromAfter = await provider.getBalance(tx.from, blockNumber);
+
+  balanceChanges.push({
+    address: tx.from,
+    before: fromBefore.toString(),
+    after: fromAfter.toString()
+  });
+
+  if (tx.to) {
+    const toBefore = await provider.getBalance(tx.to, blockNumber - 1);
+    const toAfter = await provider.getBalance(tx.to, blockNumber);
+
+    balanceChanges.push({
+      address: tx.to,
+      before: toBefore.toString(),
+      after: toAfter.toString()
+    });
+  }
+
+  // ======================
+  // ERC20 Transfer 解析
+  // ======================
+  receipt.logs.forEach(log => {
+    if (log.topics[0] === TRANSFER_TOPIC) {
+      const from = "0x" + log.topics[1].slice(26);
+      const to = "0x" + log.topics[2].slice(26);
+      const amount = ethers.getBigInt(log.data).toString();
+
+      transfers.push({
+        token: log.address,
+        from,
+        to,
+        amount
+      });
+    }
+  });
+
+  // ======================
+  // Gas Profiling
+  // ======================
+  const topOps = Object.entries(opCounts)
+    .map(([op, count]) => ({
+      op,
+      count,
+      gasCostSum: opGas[op] || 0
+    }))
+    .sort((a, b) => b.gasCostSum - a.gasCostSum)
+    .slice(0, 10);
+
+  // ======================
+  // 最终输出
+  // ======================
+  const output = {
+    rows,
+    topOps,
+    sstores,
+    storageDiff,
+    transfers,
+    balanceChanges
+  };
+
+  fs.writeFileSync(outFile, JSON.stringify(output, null, 2));
+
+  console.log("✓ parsed_trace.json generated");
 }
 
 parseTrace();
+
