@@ -1,364 +1,379 @@
-const fs = require('fs');
-const path = require('path');
-const { ethers } = require('ethers');
-const { execSync } = require('child_process');
-const { buildCallFrames } = require('./call_frames');
-const { mergeFindings } = require('./merge_findings');
+const fs = require("fs");
+const path = require("path");
+const { ethers } = require("ethers");
 
-// ====== 配置 ======
+// Configuration
 const RPC_URL = "http://127.0.0.1:8545";
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 
-// ERC20 Transfer 事件 topic
-const TRANSFER_TOPIC =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
-// ====== CLI Arguments ======
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const result = {
-    detectVulns: args.includes('--detect-vulns'),
-    embedFindings: args.includes('--embed-findings'),
-    staticScan: args.includes('--static-scan'),
-    findingsOut: null
-  };
+// Example ABI
+const ABI = [
+    "event Transfer(address indexed from, address indexed to, uint256 value)"
+];
 
-  // Parse --findings-out <path>
-  const findingsOutIdx = args.indexOf('--findings-out');
-  if (findingsOutIdx !== -1 && findingsOutIdx + 1 < args.length) {
-    result.findingsOut = args[findingsOutIdx + 1];
-  }
+const FUNCTION_SELECTORS = {
+    "0x60fe47b1": "set(uint256)",
+    "0x0c55699c": "get()"
+};
 
-  return result;
-}
+/**
+ * Gas Optimization Suggestions Rule Engine
+ */
+function generateGasOptimizationSuggestions(rows, topOps, totalGasUsed) {
+    const suggestions = [];
+    const totalGas = parseInt(totalGasUsed);
 
-// ====== 工具函数 ======
-function normalizeSlot(slot) {
-  if (!slot) return ''.padStart(64, '0');
-  const clean = slot.startsWith('0x') ? slot.slice(2) : slot;
-  return clean.padStart(64, '0');
-}
-
-// Run vulnerability detection on parsed trace
-function runVulnDetection(parsedFile) {
-  try {
-    const vulnScript = path.join(__dirname, 'vuln_detect.js');
-    const findingsFile = path.join(__dirname, '../findings.json');
-    
-    const cmd = `node ${vulnScript} --parsed ${parsedFile} --out ${findingsFile}`;
-    execSync(cmd, { stdio: 'inherit' });
-    
-    // Load findings if they were generated
-    if (fs.existsSync(findingsFile)) {
-      const findings = JSON.parse(fs.readFileSync(findingsFile, 'utf-8'));
-      return findings;
-    }
-  } catch (err) {
-    console.warn('⚠ Vulnerability detection failed:', err.message);
-  }
-  return null;
-}
-
-async function parseTrace() {
-  const traceFile = path.join(__dirname, '../trace.json');
-  const outFile = path.join(__dirname, '../parsed_trace.json');
-
-  if (!fs.existsSync(traceFile)) {
-    console.error('trace.json not found');
-    process.exit(1);
-  }
-
-  const trace = JSON.parse(fs.readFileSync(traceFile, 'utf-8'));
-  const structLogs =
-    trace.result?.structLogs ||
-    trace.tx?.structLogs ||
-    [];
-
-  const txHash = trace.tx?.hash || trace.hash;
-  if (!txHash) {
-    console.error("❌ tx hash not found in trace.json");
-    process.exit(1);
-  }
-
-  const receipt = await provider.getTransactionReceipt(txHash);
-  const tx = await provider.getTransaction(txHash);
-
-  const blockNumber = receipt.blockNumber;
-  const contractAddress = receipt.to;
-
-  const rows = [];
-  const sstores = [];
-  const storageDiff = [];
-  const transfers = [];
-  const balanceChanges = [];
-
-  const opCounts = {};
-  const opGas = {};
-
-  // ======================
-  // Trace 解析
-  // ======================
-  structLogs.forEach((log, index) => {
-    const op = log.op || 'UNKNOWN';
-
-    opCounts[op] = (opCounts[op] || 0) + 1;
-    opGas[op] = (opGas[op] || 0) + (log.gasCost || 0);
-
-    const stack = log.stack || [];
-
-    const isStorage = op === 'SSTORE';
-
-    if (isStorage && stack.length >= 2) {
-      const valueHex = stack[stack.length - 2];
-      const slotHex = stack[stack.length - 1];
-
-      const slotNorm = normalizeSlot(slotHex);
-      const valueNorm = normalizeSlot(valueHex);
-
-      sstores.push({
-        step: index + 1,
-        slot: slotNorm,
-        value: valueNorm,
-        variable: slotNorm
-      });
+    // Rule 1: Detect frequent SSTORE operations
+    const sstoreOp = topOps.find(op => op.op === 'SSTORE');
+    if (sstoreOp && sstoreOp.gasCostSum > 5000) {
+        suggestions.push({
+            severity: "high",
+            title: "Optimize SSTORE operations",
+            description: "Detected frequent SSTORE operations, consider using storage optimization mode or Solidity packed storage.",
+            estimatedGasSavings: Math.floor(sstoreOp.gasCostSum * 0.1),
+            rule: "sstoreOptimization"
+        });
     }
 
-    rows.push({
-      step: index + 1,
-      pc: log.pc ?? 0,
-      op,
-      gas: log.gas ?? 0,
-      gasCost: log.gasCost ?? 0,
-      depth: log.depth ?? 0,
-      isJump: op.startsWith('JUMP'),
-      isCall: op.includes('CALL'),
-      isStorage,
-      stackTop: stack[stack.length - 1] ?? '',
-      stackTop3: stack.slice(-3).reverse()
-    });
-  });
-
-  // ======================
-  // 真正 Storage Diff
-  // ======================
-  for (const s of sstores) {
-    const slotHex = "0x" + s.slot;
-
-    const before = await provider.getStorage(
-      contractAddress,
-      slotHex,
-      blockNumber - 1
-    );
-
-    const after = await provider.getStorage(
-      contractAddress,
-      slotHex,
-      blockNumber
-    );
-
-    storageDiff.push({
-      slot: s.slot,
-      variable: s.variable,
-      before,
-      after
-    });
-  }
-
-  // ======================
-  // Balance Changes
-  // ======================
-  const fromBefore = await provider.getBalance(tx.from, blockNumber - 1);
-  const fromAfter = await provider.getBalance(tx.from, blockNumber);
-
-  balanceChanges.push({
-    address: tx.from,
-    before: fromBefore.toString(),
-    after: fromAfter.toString()
-  });
-
-  if (tx.to) {
-    const toBefore = await provider.getBalance(tx.to, blockNumber - 1);
-    const toAfter = await provider.getBalance(tx.to, blockNumber);
-
-    balanceChanges.push({
-      address: tx.to,
-      before: toBefore.toString(),
-      after: toAfter.toString()
-    });
-  }
-
-  // ======================
-  // ERC20 Transfer 解析
-  // ======================
-  receipt.logs.forEach(log => {
-    if (log.topics[0] === TRANSFER_TOPIC) {
-      const from = "0x" + log.topics[1].slice(26);
-      const to = "0x" + log.topics[2].slice(26);
-      const amount = ethers.getBigInt(log.data).toString();
-
-      transfers.push({
-        token: log.address,
-        from,
-        to,
-        amount
-      });
+    // Rule 2: Detect repeated operations
+    const dupOp = topOps.find(op => op.op === 'DUP1' || op.op === 'DUP2');
+    if (dupOp && dupOp.count > 10) {
+        suggestions.push({
+            severity: "medium",
+            title: "Reduce repeated stack operations",
+            description: "Detected multiple DUP operations, consider reorganizing logic to reduce stack operations.",
+            estimatedGasSavings: Math.floor(dupOp.gasCostSum * 0.05),
+            rule: "reduceStackOps"
+        });
     }
-  });
 
-  // ======================
-  // Gas Profiling
-  // ======================
-  const topOps = Object.entries(opCounts)
-    .map(([op, count]) => ({
-      op,
-      count,
-      gasCostSum: opGas[op] || 0
-    }))
-    .sort((a, b) => b.gasCostSum - a.gasCostSum)
-    .slice(0, 10);
-
-  // ======================
-  // Call Frame Reconstruction
-  // ======================
-  const txMeta = {
-    from: tx.from,
-    to: tx.to || null,
-    input: tx.data || null,
-    value: tx.value.toString()
-  };
-
-  const { frames: callFrames, stepToFrameId } = buildCallFrames(structLogs, txMeta);
-
-  // ======================
-  // 最终输出
-  // ======================
-  const output = {
-    rows,
-    topOps,
-    sstores,
-    storageDiff,
-    transfers,
-    balanceChanges,
-    callFrames,
-    stepToFrameId
-  };
-
-  fs.writeFileSync(outFile, JSON.stringify(output, null, 2));
-
-  console.log("✓ parsed_trace.json generated");
-  
-  // ====== Optional: Run Vulnerability Detection & Static Analysis ======
-  const cliArgs = parseArgs();
-  
-  if (cliArgs.detectVulns || cliArgs.staticScan || cliArgs.findingsOut) {
-    console.log("\n🔍 Running vulnerability detection and analysis...");
-    
-    let dynamicFindings = null;
-    let slitherData = null;
-    let mythrilData = null;
-    
-    // Run dynamic vulnerability detection
-    if (cliArgs.detectVulns) {
-      console.log("  - Dynamic analysis (trace-based)...");
-      const vulnResult = runVulnDetection(outFile);
-      dynamicFindings = vulnResult ? vulnResult.findings : [];
-    } else {
-      dynamicFindings = [];
+    // Rule 3: Detect JUMP patterns
+    const jumpOps = topOps.filter(op => op.op.includes('JUMP'));
+    const totalJumpGas = jumpOps.reduce((sum, op) => sum + op.gasCostSum, 0);
+    if (totalJumpGas > totalGas * 0.15) {
+        suggestions.push({
+            severity: "medium",
+            title: "Optimize control flow",
+            description: "Detected frequent JUMP operations, consider using inline functions or reducing branches.",
+            estimatedGasSavings: Math.floor(totalJumpGas * 0.1),
+            rule: "optimizeControlFlow"
+        });
     }
-    
-    // Run static analysis if requested
-    if (cliArgs.staticScan) {
-      console.log("  - Static analysis (Slither/Mythril)...");
-      const staticResult = runStaticScan();
-      slitherData = staticResult.slither;
-      mythrilData = staticResult.mythril;
+
+    // Rule 4: Detect RETURN/REVERT
+    const returnOps = topOps.filter(op => op.op === 'RETURN' || op.op === 'REVERT');
+    if (returnOps.length > 2) {
+        suggestions.push({
+            severity: "low",
+            title: "Merge return paths",
+            description: "Detected multiple return paths, consider merging to reduce code duplication.",
+            estimatedGasSavings: 100,
+            rule: "mergeReturnPaths"
+        });
     }
-    
-    // Merge findings
-    const mergedFindings = mergeFindings(dynamicFindings, slitherData, mythrilData);
-    
-    const findingsSummary = {
-      total: mergedFindings.length,
-      critical: mergedFindings.filter(f => f.severity === 'critical').length,
-      high: mergedFindings.filter(f => f.severity === 'high').length,
-      medium: mergedFindings.filter(f => f.severity === 'medium').length,
-      low: mergedFindings.filter(f => f.severity === 'low').length
-    };
-    
-    // Output merged findings to separate file if specified
-    if (cliArgs.findingsOut) {
-      const findingsOutput = {
-        findings: mergedFindings,
-        summary: findingsSummary
-      };
-      fs.writeFileSync(cliArgs.findingsOut, JSON.stringify(findingsOutput, null, 2));
-      console.log(`✓ Merged findings written to ${cliArgs.findingsOut}`);
-      console.log(`  Total: ${findingsSummary.total} (Critical: ${findingsSummary.critical}, High: ${findingsSummary.high}, Medium: ${findingsSummary.medium}, Low: ${findingsSummary.low})`);
+
+    // Rule 5: Detect PUSH operations
+    const pushOps = topOps.filter(op => op.op.startsWith('PUSH'));
+    const totalPushGas = pushOps.reduce((sum, op) => sum + op.gasCostSum, 0);
+    if (totalPushGas > totalGas * 0.1) {
+        suggestions.push({
+            severity: "low",
+            title: "Consider constant inlining",
+            description: "Detected frequent PUSH operations, consider constant folding during compilation.",
+            estimatedGasSavings: Math.floor(totalPushGas * 0.05),
+            rule: "constantInlining"
+        });
     }
-    
-    // Embed findings in parsed trace if requested
-    if (cliArgs.embedFindings) {
-      output.findings = mergedFindings;
-      output.vulnSummary = findingsSummary;
-      fs.writeFileSync(outFile, JSON.stringify(output, null, 2));
-      console.log(`✓ ${mergedFindings.length} merged findings embedded in parsed_trace.json`);
-    }
-  }
+
+    return suggestions;
 }
 
 /**
- * Run static analysis (Slither and Mythril)
- * @returns {Object} {slither: data, mythril: data} - null if tools not available
+ * Build Call Tree
  */
-function runStaticScan() {
-  const result = { slither: null, mythril: null };
-  
-  // Try Slither
-  try {
-    const slitherScript = path.join(__dirname, 'static_scan.js');
-    if (fs.existsSync(slitherScript)) {
-      try {
-        console.log("    - Running Slither...");
-        execSync(`node ${slitherScript} --tool slither`, { stdio: 'pipe' });
-        
-        // Try to read output
-        const slitherPath = path.join(process.cwd(), 'slither.json');
-        if (fs.existsSync(slitherPath)) {
-          result.slither = JSON.parse(fs.readFileSync(slitherPath, 'utf-8'));
-          console.log("    ✓ Slither analysis complete");
+function buildCallTree(rows) {
+    const callStack = [];
+    const callTree = [];
+    let callId = 0;
+
+    rows.forEach((row, index) => {
+        if (row.isCall) {
+            const newCall = {
+                id: callId++,
+                step: row.step,
+                pc: row.pc,
+                op: row.op,
+                depth: row.depth,
+                startGas: row.gas,
+                children: []
+            };
+
+            if (callStack.length > 0) {
+                callStack[callStack.length - 1].children.push(newCall);
+            } else {
+                callTree.push(newCall);
+            }
+
+            callStack.push(newCall);
+        } else if (row.op === 'RETURN' || row.op === 'REVERT') {
+            // This cannot accurately detect call termination, but as a simplified version
+            if (callStack.length > 0 && index > 0) {
+                const currentDepth = row.depth;
+                while (callStack.length > 0 && callStack[callStack.length - 1].depth >= currentDepth) {
+                    callStack.pop();
+                }
+            }
         }
-      } catch (err) {
-        console.warn(`    ⚠ Slither not available or failed: ${err.message}`);
-      }
-    }
-  } catch (err) {
-    console.warn(`    ⚠ Slither skipped: ${err.message}`);
-  }
-  
-  // Try Mythril
-  try {
-    const staticScript = path.join(__dirname, 'static_scan.js');
-    if (fs.existsSync(staticScript)) {
-      try {
-        console.log("    - Running Mythril...");
-        execSync(`node ${staticScript} --tool mythril`, { stdio: 'pipe' });
-        
-        // Try to read output
-        const mythrilPath = path.join(process.cwd(), 'mythril.json');
-        if (fs.existsSync(mythrilPath)) {
-          result.mythril = JSON.parse(fs.readFileSync(mythrilPath, 'utf-8'));
-          console.log("    ✓ Mythril analysis complete");
-        }
-      } catch (err) {
-        console.warn(`    ⚠ Mythril not available or failed: ${err.message}`);
-      }
-    }
-  } catch (err) {
-    console.warn(`    ⚠ Mythril skipped: ${err.message}`);
-  }
-  
-  return result;
+    });
+
+    return callTree;
 }
 
-parseTrace();
 
+/**
+ * Normalize Slot data
+ */
+function normalizeSlot(slot) {
+    if (!slot) return ''.padStart(64, '0');
+    const clean = slot.startsWith("0x") ? slot.slice(2) : slot;
+    return clean.padStart(64, "0");
+}
+
+/**
+ * Handle BigInt serialization in JSON.stringify
+ */
+function bigIntReplacer(key, value) {
+    return typeof value === 'bigint' ? value.toString() : value;
+}
+
+async function parseTrace() {
+    try {
+        const traceFile = path.join(__dirname, "../trace.json");
+        const outFile = path.join(__dirname, "../frontend/parsed_trace.json");
+
+        if (!fs.existsSync(traceFile)) {
+            console.error("❌ Error: Cannot find trace.json file, path:", traceFile);
+            return;
+        }
+
+        const traceData = JSON.parse(fs.readFileSync(traceFile, "utf-8"));
+        
+        // Support different trace export formats
+        const structLogs = traceData.result?.structLogs || traceData.tx?.structLogs || traceData.structLogs || [];
+
+        // Support passing txHash from command line or fallback to common fields
+        const cliTxHash = process.argv[2];
+        let txHash = cliTxHash || traceData.tx?.hash || traceData.hash || traceData.result?.hash || traceData.transactionHash || traceData.result?.transactionHash;
+
+        // If txHash is not found, try extracting from scripts/trace.js
+        if (!txHash) {
+            try {
+                const traceJsPath = path.join(__dirname, "../scripts/trace.js");
+                if (fs.existsSync(traceJsPath)) {
+                    const traceJs = fs.readFileSync(traceJsPath, "utf-8");
+                    const m = traceJs.match(/txHash\s*=\s*["'](0x[a-fA-F0-9]{64})["']/);  
+                    if (m) {
+                        txHash = m[1];
+                        console.log(`Auto-read txHash from scripts/trace.js: ${txHash}`);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        if (!txHash) {
+            console.error("❌ Cannot extract transaction hash (txHash) from trace file.");
+            console.error("Solution:\n 1) Pass txHash as parameter: node scripts/parse_trace.cjs <txHash>\n 2) Ensure trace.json contains tx.hash or hash field\n 3) Or define txHash constant in scripts/trace.js (auto-read)");
+            return;
+        }
+
+        console.log(`Processing transaction: ${txHash}`);
+
+        // Fetch on-chain data
+        const [receipt, tx] = await Promise.all([
+            provider.getTransactionReceipt(txHash),
+            provider.getTransaction(txHash)
+        ]);
+
+        if (!receipt) throw new Error("Cannot get transaction receipt, ensure local node contains this transaction");
+
+        const blockNumber = receipt.blockNumber;
+        const contractAddress = receipt.to;
+
+        // ==================== Initialize all data structures ====================
+        const rows = [];
+        const sstores = [];
+        const storageDiff = [];
+        const balanceChanges = [];
+        const transfers = [];
+        const decodedEvents = [];
+        const gasOptimizationSuggestions = [];
+        const callTree = [];
+        const functionGasProfile = [];
+        
+        const opCounts = {};
+        const opGas = {};
+
+        // ============= 1. Process instruction stream (structLogs) =============
+        structLogs.forEach((log, index) => {
+            const op = log.op || "UNKNOWN";
+            const gasCost = parseInt(log.gasCost || 0);
+
+            opCounts[op] = (opCounts[op] || 0) + 1;
+            opGas[op] = (opGas[op] || 0) + gasCost;
+
+            const stack = log.stack || [];
+            const isStorage = op === "SSTORE";
+
+            if (isStorage && stack.length >= 2) {
+                // EVM Stack is LIFO, SSTORE [slot, value]
+                const slotHex = stack[stack.length - 1];
+                const valueHex = stack[stack.length - 2];
+
+                sstores.push({
+                    step: index + 1,
+                    slot: normalizeSlot(slotHex),
+                    value: normalizeSlot(valueHex),
+                    variable: normalizeSlot(slotHex)
+                });
+            }
+
+            rows.push({
+                step: index + 1,
+                pc: log.pc ?? 0,
+                op,
+                gas: log.gas ?? 0,
+                gasCost,
+                depth: log.depth ?? 0,
+                isJump: op.startsWith("JUMP"),
+                isCall: op.includes("CALL"),
+                isStorage,
+                stackTop: stack[stack.length - 1] ?? "",
+                stackTop3: stack.slice(-3).reverse()
+            });
+        });
+
+        // ============= 2. Process state changes (Storage Diff) =============
+        for (const s of sstores) {
+            const slotHex = "0x" + s.slot;
+            try {
+                const prevBlock = blockNumber > 0 ? blockNumber - 1 : 0;
+                const before = await provider.getStorage(contractAddress, slotHex, prevBlock);
+                const after = await provider.getStorage(contractAddress, slotHex, blockNumber);
+
+                storageDiff.push({
+                    slot: s.slot,
+                    before,
+                    after
+                });
+            } catch (e) {
+                console.warn(`Skipping storage comparison for Slot ${slotHex}: ${e.message}`);
+            }
+        }
+
+        // ============= 3. Balance changes =============
+        try {
+            const prevBlock = blockNumber > 0 ? blockNumber - 1 : 0;
+            const fromBefore = await provider.getBalance(tx.from, prevBlock);
+            const fromAfter = await provider.getBalance(tx.from, blockNumber);
+
+            balanceChanges.push({
+                address: tx.from,
+                before: fromBefore.toString(),
+                after: fromAfter.toString()
+            });
+        } catch (e) {
+            console.warn(`Balance query failed: ${e.message}`);
+        }
+
+        // ============= 4. Event parsing =============
+        const iface = new ethers.Interface(ABI);
+        receipt.logs.forEach(log => {
+            // Parse standard ERC20 Transfer
+            if (log.topics[0] === TRANSFER_TOPIC && log.topics.length >= 3) {
+                const from = ethers.getAddress("0x" + log.topics[1].slice(26));
+                const to = ethers.getAddress("0x" + log.topics[2].slice(26));
+                const amount = ethers.getBigInt(log.data || "0").toString();
+
+                transfers.push({
+                    token: log.address,
+                    from, to, amount
+                });
+            }
+
+            // Parse custom ABI events
+            try {
+                const parsed = iface.parseLog(log);
+                if (parsed) {
+                    decodedEvents.push({
+                        name: parsed.name,
+                        args: parsed.args
+                    });
+                }
+            } catch (e) { /* Ignore unparseable events */ }
+        });
+
+        // ============= 5. Generate topOps summary =============
+        const topOps = Object.entries(opCounts)
+            .map(([op, count]) => ({
+                op,
+                count,
+                gasCostSum: opGas[op] || 0
+            }))
+            .sort((a, b) => b.gasCostSum - a.gasCostSum);
+
+        // ============= 6. Build callTree =============
+        const builtCallTree = buildCallTree(rows);
+        callTree.push(...builtCallTree);
+
+        // ============= 7. Generate function gas analysis =============
+        const selector = tx.data.slice(0, 10);
+        functionGasProfile.push({
+            selector,
+            functionName: FUNCTION_SELECTORS[selector] || "unknown",
+            totalGasUsed: receipt.gasUsed.toString(),
+            gasPerInstruction: Math.floor(parseInt(receipt.gasUsed) / rows.length)
+        });
+
+        // ============= 8. Generate gas optimization suggestions =============
+        const suggestions = generateGasOptimizationSuggestions(rows, topOps, receipt.gasUsed.toString());
+        gasOptimizationSuggestions.push(...suggestions);
+
+        // ============= 9. Build final output =============
+        const output = {
+            rows,
+            topOps,
+            sstores,
+            storageDiff,
+            transfers,
+            balanceChanges,
+            functionGasProfile,
+            gasOptimizationSuggestions,
+            callTree,
+            decodedEvents
+        };
+
+        // Write to file, using bigIntReplacer to handle serialization
+        fs.mkdirSync(path.dirname(outFile), { recursive: true });
+        fs.writeFileSync(outFile, JSON.stringify(output, bigIntReplacer, 2));
+        
+        console.log(` Parsing completed! Results saved to: ${outFile}`);
+        console.log(` Statistics:`);
+        console.log(`  - Total instruction steps: ${rows.length}`);
+        console.log(`  - SSTORE operations: ${sstores.length}`);
+        console.log(`  - Storage changes: ${storageDiff.length}`);
+        console.log(`  - Transfer events: ${transfers.length}`);
+        console.log(`  - Parsed events: ${decodedEvents.length}`);
+        console.log(`  - Call tree depth: ${Math.max(...callTree.map(c => c.depth || 1), 0)}`);
+        console.log(`  - Gas optimization suggestions: ${gasOptimizationSuggestions.length}`);
+
+    } catch (error) {
+        console.error("❌ Script execution failed:", error);
+    }
+}
+
+
+parseTrace();
