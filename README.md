@@ -86,7 +86,7 @@ output example为：
 ```trace.json
 
 ###Step 5: Parse trace and generate debugger data ### 
-node scripts/parse_trace.js
+node scripts/parse_trace.cjs
 
 
 ```This generates:
