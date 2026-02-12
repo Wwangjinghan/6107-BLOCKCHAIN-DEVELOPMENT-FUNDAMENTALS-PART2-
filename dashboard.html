@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EVM Trace Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Ubuntu', sans-serif;
+            background: #1f1f23; /* 深灰背景 */
+            color: #8a9199;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-weight: 700;
+            color: #8a9199;
+            margin-bottom: 10px;
+        }
+
+        /* ---------- Return Button ---------- */
+        #backBtn {
+            align-self: flex-start;
+            background-color: #6b7a89;
+            color: #f5f7f9;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        #backBtn:hover { background-color: #7a8a9a; }
+
+        /* ---------- Layout ---------- */
+        #dashboardContainer {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 120px); /* 留出标题和按钮空间 */
+        }
+
+        #tablesPanel {
+            flex: 1; /* 左边表格占比 */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto; /* 左边表格滚动 */
+        }
+
+        #chartPanel {
+            flex: 1; /* 右边柱状图占比 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .panel {
+            background: #26262c;
+            border: 1px solid #3a3a42;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .panel h2 {
+            padding: 12px 16px;
+            background: #6b7a89;
+            font-size: 16px;
+            font-weight: 700;
+            color: #f5f7f9;
+            border-bottom: 1px solid #7a8a9a;
+        }
+
+        /* Vulnerability highlights */
+        .vuln-badge { display:inline-block; padding:4px 8px; border-radius:6px; background: rgba(201,92,66,0.08); color:#f5f7f9; font-weight:700; }
+        .row-sstore { background: rgba(201,92,66,0.04); }
+        .row-call { background: rgba(108,138,153,0.03); }
+
+        .panel .content {
+            padding: 16px;
+            flex: 1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 14px;
+            background: #26262c;
+            border-radius: 6px;
+            overflow: hidden;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+
+        th, td {
+            border: 1px solid #3a3a42;
+            padding: 8px 12px;
+            text-align: left;
+            color: #8a9199;
+            font-weight: 600;
+        }
+
+        th {
+            background: #6b7a89;
+            font-weight: 700;
+            color: #f5f7f9;
+            font-size: 13px;
+        }
+
+        tbody tr:nth-child(even) { background: #29292f; }
+        tbody tr:hover { background: #31313a; }
+
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 6px;
+            background: #26262c;
+        }
+
+        @media (max-width: 768px) {
+            #dashboardContainer {
+                flex-direction: column;
+                height: auto;
+            }
+            canvas { height: 250px !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <h1>EVM Trace Dashboard</h1>
+
+    <!-- Return Button -->
+    <button id="backBtn">← Back to Index</button>
+
+    <div id="dashboardContainer">
+        <div style="width:320px;">
+            <div class="panel" style="margin-bottom:20px;">
+                <h2>Vulnerability Summary</h2>
+                <div class="content" id="vulnSummary">No vulnerability data found.</div>
+            </div>
+        </div>
+        <!-- 左边表格 -->
+        <div id="tablesPanel">
+            <div class="panel">
+                <h2>Top Gas Consuming Operations</h2>
+                <div class="content">
+                    <table id="topOpsTable">
+                        <thead>
+                        <tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>All SSTORE Changes</h2>
+                <div class="content">
+                    <table id="storageDiffTable">
+                        <thead>
+                        <tr><th>Step</th><th>Slot</th><th>Old Value</th><th>New Value</th><th>Op</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右边柱状图 -->
+        <div id="chartPanel">
+            <div class="panel">
+                <h2>Top Gas Consuming Operations Chart</h2>
+                <div class="content">
+                    <canvas id="topOpsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const barColors = [
+        '#6b7a89', // 灰蓝
+        '#6b8074', // 灰绿
+        '#7a6989', // 灰紫
+        '#8a7567', // 灰棕
+        '#6b8685', // 灰蓝绿
+    ];
+    document.getElementById('backBtn').onclick = () => {
+        window.location.href = './index.html';
+    };
+
+    async function main() {
+        const topOpsBody = document.querySelector('#topOpsTable tbody');
+        const storageBody = document.querySelector('#storageDiffTable tbody');
+        const ctx = document.getElementById('topOpsChart').getContext('2d');
+
+        const res = await fetch('./parsed_trace.json');
+        const data = await res.json();
+
+        // ---------- Top Ops Table ----------
+        const gasMap = {};
+        data.rows.forEach(r => { gasMap[r.op] = (gasMap[r.op] || 0) + (r.gasCost || 0); });
+
+        data.topOps.forEach(op => {
+            const tr = document.createElement('tr');
+            tr.className = (op.op === 'SSTORE') ? 'row-sstore' : ((op.op === 'CALL' || op.op === 'DELEGATECALL') ? 'row-call' : '');
+            tr.innerHTML = `<td>${op.op}</td><td>${op.count}</td><td>${op.gasCostSum}</td>`;
+            topOpsBody.appendChild(tr);
+        });
+
+        // ---------- Top Ops Chart ----------
+        const labels = data.topOps.map(o => o.op);
+        const counts = data.topOps.map(o => o.count);
+
+        const baseColor = [206,154,106];
+        const colors = counts.map((_, i) => {
+            const factor = 1 - i*0.1;
+            const r = Math.round(baseColor[0]*factor);
+            const g = Math.round(baseColor[1]*factor);
+            const b = Math.round(baseColor[2]*factor);
+            return `rgb(${r},${g},${b})`;
+        });
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Count',
+                    data: counts,
+                    backgroundColor: barColors,
+                    borderRadius: 6,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const op = ctx.label;
+                                const count = ctx.raw;
+                                const gas = gasMap[op] || 0;
+                                return `OP: ${op} | Count: ${count} | Gas: ${gas}`;
+                            }
+                        }
+                    }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // ---------- Storage Diff Table (use sstores if available) ----------
+        storageBody.innerHTML = '';
+        if (data.sstores && data.sstores.length > 0) {
+            data.sstores.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${s.step}</td><td>0x${s.slot}</td><td>${s.before ?? '(unknown)'}</td><td>${s.after ?? '(unknown)'}</td><td>SSTORE</td>`;
+                storageBody.appendChild(tr);
+            });
+        } else {
+            // fallback to rows
+            const prevStorage = {};
+            data.rows.forEach(row => {
+                if (!row.isStorage) return;
+                const slot = row.storageSlotName || '0x0';
+                const oldVal = prevStorage[slot] !== undefined ? prevStorage[slot] : '0x0';
+                const newVal = row.stackTop !== undefined && row.stackTop !== '' ? row.stackTop : '(empty)';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${row.step}</td><td>${slot}</td><td>${oldVal}</td><td>${newVal}</td><td>${row.op}</td>`;
+                storageBody.appendChild(tr);
+                prevStorage[slot] = newVal;
+            });
+        }
+
+        // Try to load findings.json for summary
+        fetch('./findings.json').then(r => r.ok ? r.json() : null).then(f => {
+            const vulnSummaryEl = document.getElementById('vulnSummary');
+            if (!f || !f.findings || f.findings.length === 0) {
+                vulnSummaryEl.textContent = 'No vulnerabilities detected.';
+                return;
+            }
+            vulnSummaryEl.innerHTML = `<div class="vuln-badge">${f.summary.high||0} High</div> <div style="margin-left:8px;color:#a8adb5;display:inline-block">Total: ${f.summary.total}</div>`;
+        }).catch(()=>{});
+    }
+
+    main();
+</script>
+</body>
+</html>

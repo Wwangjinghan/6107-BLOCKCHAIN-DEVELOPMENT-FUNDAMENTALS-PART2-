@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EVM Trace Debugger - Modern Layout</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Ubuntu', sans-serif;
+            background: #1f1f23;
+            color: #8a9199;
+            min-height: 100vh;
+            line-height: 1.6;
+            font-size: 14px;
+            font-weight: 400;
+            text-align: center;
+        }
+
+        .top-bar {
+            background: #26262c;
+            padding: 16px 20px;
+            border-bottom: 1px solid #3a3a42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .top-bar-title {
+            font-weight: 700;
+            color: #f5f7f9;
+            font-size: 16px;
+        }
+
+        .txHash-display {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            background: #1f1f23;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #3a3a42;
+            color: #a8adb5;
+            font-size: 12px;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .txHash-input-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .txHash-input {
+            padding: 8px 12px;
+            border: 1px solid #3a3a42;
+            border-radius: 6px;
+            background: #26262c;
+            color: #8a9199;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            width: 300px;
+        }
+
+        .txHash-input::placeholder {
+            color: #6b7a89;
+        }
+
+        .btn {
+            background-color: #6b7a89;
+            color: #f5f7f9;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background-color: #7a8a9a; }
+        .btn-large { padding: 10px 18px; font-weight: 700; }
+
+        #app {
+            display: grid;
+            grid-template-columns: 400px 1fr 450px;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        #steps {
+            background: #29292f;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+
+        #detail-right {
+            height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+
+        .step {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            display: grid;
+            grid-template-columns: 40px 50px 1fr 60px;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: #26262c;
+            border-left: 4px solid transparent;
+            font-weight: 900;
+            text-align: center;
+        }
+
+        .step.active { border-left: 4px solid #7a8a9a; background: #31313a; transform: scale(1.02); }
+        .step:hover { background: #34343d; }
+        .jump { color: #8a9f7a; font-weight: 700; }
+        .storage { color: #9a7a8a; font-weight: 700; }
+        .op-sstore { border-left: 4px solid rgba(201,92,66,0.18); }
+        .op-call { border-left: 4px solid rgba(108,138,153,0.14); }
+        .op-delegate { border-left: 4px solid rgba(154,122,138,0.14); }
+
+        #detail {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #26262c;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+            overflow: hidden;
+            border: 1px solid #3a3a42;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .panel h3 {
+            background: #6b7a89;
+            color: #f5f7f9;
+            padding: 14px 18px;
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .panel .subtext { font-size: 12px; color: #a8adb5; margin-top: 6px; }
+        .panel .content { padding: 16px 18px; font-size: 14px; color: #8a9199; white-space: pre-wrap; text-align: left; }
+
+        table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 8px; overflow: hidden; font-size: 14px; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #3a3a42; color: #8a9199; font-weight: 600; }
+        th { background: #6b7a89; color: #f5f7f9; font-size: 13px; }
+        tbody tr:nth-child(even) { background: #29292f; }
+        tbody tr:hover { background: #31313a; }
+
+        canvas { max-width: 100%; margin-bottom: 16px; border-radius: 6px; background: #26262c; padding: 6px; }
+
+        /* Vulnerability panel styles */
+        .vuln-summary {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #3a3a42;
+        }
+
+        .vuln-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: rgba(122,138,154,0.08);
+            color: #f5f7f9;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .vuln-badge.critical {
+            background: rgba(201,60,50,0.15);
+            color: #ff6b6b;
+        }
+
+        .vuln-badge.high {
+            background: rgba(201,92,66,0.15);
+            color: #ff9966;
+        }
+
+        .vuln-badge.medium {
+            background: rgba(200,130,70,0.15);
+            color: #ffcc66;
+        }
+
+        .vuln-badge.low {
+            background: rgba(100,150,100,0.15);
+            color: #99cc99;
+        }
+
+        .vuln-finding {
+            background: #31313a;
+            border-left: 4px solid #7a8a9a;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            text-align: left;
+            font-size: 12px;
+        }
+
+        .vuln-finding.critical {
+            border-left-color: #ff6b6b;
+            background: rgba(201,60,50,0.05);
+        }
+
+        .vuln-finding.high {
+            border-left-color: #ff9966;
+            background: rgba(201,92,66,0.05);
+        }
+
+        .vuln-finding.medium {
+            border-left-color: #ffcc66;
+            background: rgba(200,130,70,0.05);
+        }
+
+        .vuln-finding.low {
+            border-left-color: #99cc99;
+            background: rgba(100,150,100,0.05);
+        }
+
+        .vuln-title {
+            font-weight: 700;
+            color: #f5f7f9;
+            margin-bottom: 6px;
+        }
+
+        .vuln-type {
+            display: inline-block;
+            background: rgba(122,138,154,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #a8adb5;
+            margin-right: 8px;
+        }
+
+        .vuln-description {
+            color: #a8adb5;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .vuln-evidence {
+            background: rgba(0,0,0,0.2);
+            padding: 6px;
+            border-radius: 4px;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            color: #7a9f7a;
+            margin-bottom: 6px;
+            font-size: 11px;
+            overflow-x: auto;
+        }
+
+        .vuln-recommendation {
+            color: #a8adb5;
+            font-style: italic;
+            font-size: 11px;
+        }
+
+        .error-box {
+            background: rgba(201,60,50,0.1);
+            border: 1px solid rgba(201,60,50,0.3);
+            border-left: 4px solid #ff6b6b;
+            padding: 10px;
+            border-radius: 6px;
+            color: #ff9966;
+            margin-bottom: 10px;
+            font-size: 12px;
+            text-align: left;
+        }
+
+        .success-box {
+            background: rgba(100,150,100,0.1);
+            border: 1px solid rgba(100,150,100,0.3);
+            border-left: 4px solid #99cc99;
+            padding: 10px;
+            border-radius: 6px;
+            color: #99cc99;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .info-box {
+            background: rgba(122,138,154,0.08);
+            border: 1px solid rgba(122,138,154,0.15);
+            padding: 10px;
+            border-radius: 6px;
+            color: #a8adb5;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 1200px) { #app { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 768px) { #app { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<!-- Top bar with txHash display and input -->
+<div class="top-bar">
+    <div class="top-bar-title">EVM Trace Debugger</div>
+    <div id="txHashDisplay" class="txHash-display">txHash: unknown</div>
+    <div class="txHash-input-group">
+        <input
+                type="text"
+                id="txHashInput"
+                class="txHash-input"
+                placeholder="Enter txHash (0x...) to load"
+        />
+        <button id="loadTxBtn" class="btn">Load</button>
+    </div>
+    <button id="dashboardBtn" class="btn btn-large">Open Dashboard</button>
+</div>
+
+<div id="app">
+    <div id="steps"></div>
+
+    <div id="detail">
+        <div class="panel">
+            <h3>Step Details</h3>
+            <div class="subtext">Click a step to view its execution info</div>
+            <div class="content" id="stepDetail">Select a step</div>
+        </div>
+        <div class="panel">
+            <h3>Stack Top</h3>
+            <div class="subtext">Top item on the stack for this step</div>
+            <div class="content" id="stackTop"></div>
+        </div>
+        <div class="panel">
+            <h3>Stack Top 3</h3>
+            <div class="subtext">Top 3 items on the stack</div>
+            <div class="content" id="stackTop3"></div>
+        </div>
+        <div class="panel" id="vulnPanel">
+            <h3>Vulnerabilities</h3>
+            <div class="subtext">Automatic dynamic/static findings</div>
+            <div class="content" id="vulnContent">
+                <div class="info-box">Loading vulnerabilities...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detail-right">
+        <div class="panel">
+            <h3>Top Gas Ops</h3>
+            <div class="subtext">Most frequent ops by gas usage</div>
+            <div class="content">
+                <canvas id="topOpsChart" height="180"></canvas>
+                <table id="topOpsTable">
+                    <thead><tr><th>OP</th><th>Count</th><th>Gas Sum</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div style="grid-column: span 3; padding:0 20px;">
+        <div class="panel">
+            <h3>Call Tree & Gas Suggestions</h3>
+            <div class="subtext">Call tree and gas optimization hints</div>
+            <div class="content" id="analysisContent">No analysis yet.</div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const barColors = [
+        '#6b7a89', // 灰蓝
+        '#6b8074', // 灰绿
+        '#7a6989', // 灰紫
+        '#8a7567', // 灰棕
+        '#6b8685', // 灰蓝绿
+    ];
+
+    // Get txHash from URL parameter or localStorage
+    const params = new URLSearchParams(window.location.search);
+    let currentTxHash = params.get('tx') || localStorage.getItem('lastTxHash') || 'unknown';
+
+    const txHashDisplayEl = document.getElementById('txHashDisplay');
+    const txHashInputEl = document.getElementById('txHashInput');
+    const loadTxBtnEl = document.getElementById('loadTxBtn');
+
+    function updateTxHashDisplay() {
+        const display = currentTxHash && currentTxHash !== 'unknown'
+            ? `txHash: ${currentTxHash.substring(0, 20)}...`
+            : 'txHash: unknown';
+        txHashDisplayEl.textContent = display;
+        txHashDisplayEl.title = currentTxHash;
+    }
+
+    function loadTxFromInput() {
+        const inputVal = txHashInputEl.value.trim();
+        if (!inputVal) {
+            alert('Please enter a txHash');
+            return;
+        }
+        if (!inputVal.startsWith('0x')) {
+            alert('txHash must start with 0x');
+            return;
+        }
+        currentTxHash = inputVal;
+        localStorage.setItem('lastTxHash', currentTxHash);
+        updateTxHashDisplay();
+        location.reload();
+    }
+
+    loadTxBtnEl.addEventListener('click', loadTxFromInput);
+    txHashInputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loadTxFromInput();
+    });
+
+    updateTxHashDisplay();
+
+    document.getElementById('dashboardBtn').onclick = () => { window.location.href = './dashboard.html'; };
+
+    /**
+     * Load and merge findings from multiple sources
+     * Falls back gracefully if primary source unavailable
+     */
+    async function loadFindings() {
+        const vulnContent = document.getElementById('vulnContent');
+        vulnContent.innerHTML = '<div class="info-box">Loading vulnerabilities...</div>';
+
+        try {
+            const cacheBuster = '?t=' + Date.now();
+            let findingsData = null;
+
+            // Try primary source: findings.json (merged/generated)
+            try {
+                const resp = await fetch('./findings.json' + cacheBuster);
+                if (resp.ok) {
+                    findingsData = await resp.json();
+                    console.log('✓ Loaded findings from findings.json');
+                }
+            } catch (err) {
+                console.warn('Failed to load findings.json:', err.message);
+            }
+
+            // If findings.json empty or missing, try dynamic_findings.json
+            if (!findingsData || !findingsData.findings) {
+                try {
+                    const resp = await fetch('./dynamic_findings.json' + cacheBuster);
+                    if (resp.ok) {
+                        findingsData = await resp.json();
+                        console.log('✓ Falling back to dynamic_findings.json');
+                    }
+                } catch (err) {
+                    console.warn('Failed to load dynamic_findings.json:', err.message);
+                }
+            }
+
+            // If still empty, try static_findings.json
+            if (!findingsData || !findingsData.findings) {
+                try {
+                    const resp = await fetch('./static_findings.json' + cacheBuster);
+                    if (resp.ok) {
+                        findingsData = await resp.json();
+                        console.log('✓ Falling back to static_findings.json');
+                    }
+                } catch (err) {
+                    console.warn('Failed to load static_findings.json:', err.message);
+                }
+            }
+
+            // Render findings or show "no vulnerabilities"
+            if (!findingsData || !findingsData.findings || findingsData.findings.length === 0) {
+                vulnContent.innerHTML = '<div class="success-box">✓ No vulnerabilities detected for this transaction.</div>';
+                return;
+            }
+
+            // Sort by severity
+            const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+            const findings = findingsData.findings.sort((a, b) => {
+                const aOrder = severityOrder[a.severity?.toLowerCase()] ?? 5;
+                const bOrder = severityOrder[b.severity?.toLowerCase()] ?? 5;
+                return aOrder - bOrder;
+            });
+
+            // Build summary
+            const summary = findingsData.summary || countBySeverity(findings);
+            let html = '<div class="vuln-summary">';
+            html += `<span class="vuln-badge">Total: ${summary.total}</span>`;
+            if (summary.critical > 0) html += `<span class="vuln-badge critical">Critical: ${summary.critical}</span>`;
+            if (summary.high > 0) html += `<span class="vuln-badge high">High: ${summary.high}</span>`;
+            if (summary.medium > 0) html += `<span class="vuln-badge medium">Medium: ${summary.medium}</span>`;
+            if (summary.low > 0) html += `<span class="vuln-badge low">Low: ${summary.low}</span>`;
+            if (summary.info > 0) html += `<span class="vuln-badge">Info: ${summary.info}</span>`;
+            html += '</div>';
+
+            // Build findings list
+            findings.slice(0, 20).forEach(f => {
+                const severity = (f.severity || 'info').toLowerCase();
+                const type = f.type || f.rule || 'unknown';
+                const title = f.title || 'Unknown Vulnerability';
+                const description = f.description || '';
+                const evidence = f.evidence ? JSON.stringify(f.evidence, null, 2) : '(no evidence)';
+                const recommendation = f.recommendation || 'Review and remediate as appropriate.';
+                const source = f.source || 'unknown';
+
+                html += `
+                    <div class="vuln-finding ${severity}">
+                        <div class="vuln-title">${title}</div>
+                        <div>
+                            <span class="vuln-type">${type}</span>
+                            <span style="color:#a8adb5;font-size:11px;">[${severity.toUpperCase()} • ${source}]</span>
+                        </div>
+                        <div class="vuln-description">${description}</div>
+                        <div class="vuln-evidence">${evidence}</div>
+                        <div class="vuln-recommendation">💡 ${recommendation}</div>
+                    </div>
+                `;
+            });
+
+            vulnContent.innerHTML = html;
+
+        } catch (err) {
+            console.error('Error loading findings:', err);
+            vulnContent.innerHTML = `<div class="error-box">❌ Failed to load vulnerability results: ${err.message}</div>`;
+        }
+    }
+
+    function countBySeverity(findings) {
+        const counts = { total: findings.length, critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+        findings.forEach(f => {
+            const sev = (f.severity || 'info').toLowerCase();
+            if (sev in counts) counts[sev]++;
+        });
+        return counts;
+    }
+
+    async function main() {
+        const stepsEl = document.getElementById('steps');
+        const detailEl = document.getElementById('stepDetail');
+        const stackTopEl = document.getElementById('stackTop');
+        const stackTop3El = document.getElementById('stackTop3');
+        const topOpsBody = document.querySelector('#topOpsTable tbody');
+        const ctx = document.getElementById('topOpsChart').getContext('2d');
+
+        let chart, allRows = [];
+
+        try {
+            const res = await fetch('./parsed_trace.json?t=' + Date.now());
+            if (!res.ok) throw new Error(`Failed to load trace: ${res.status}`);
+            const data = await res.json();
+            allRows = data.rows || [];
+
+            render(data);
+
+            function render(data) {
+                stepsEl.innerHTML = '';
+                topOpsBody.innerHTML = '';
+
+                data.rows.forEach(row => {
+                    const el = document.createElement('div');
+                    el.className = 'step';
+                    if (row.isJump) el.classList.add('jump');
+                    if (row.isStorage) el.classList.add('storage');
+                    if (row.op === 'SSTORE') el.classList.add('op-sstore');
+                    if (row.op === 'CALL') el.classList.add('op-call');
+                    if (row.op === 'DELEGATECALL') el.classList.add('op-delegate');
+                    el.innerHTML = `<div>#${row.step}</div><div>pc ${row.pc}</div><div>${row.op}</div><div>${row.gasCost}</div>`;
+                    el.onclick = () => selectStep(row, el);
+                    stepsEl.appendChild(el);
+                });
+
+                data.topOps.forEach(op => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${op.op}</td><td>${op.count}</td><td>${op.gasCostSum}</td>`;
+                    topOpsBody.appendChild(tr);
+                });
+
+                const labels = (data.topOps || []).map(o => o.op);
+                const counts = (data.topOps || []).map(o => o.count);
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Count',
+                            data: counts,
+                            backgroundColor: barColors,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                });
+
+                const analysisEl = document.getElementById('analysisContent');
+                analysisEl.innerHTML = '';
+                if (data.gasSuggestions && data.gasSuggestions.length > 0) {
+                    const gbox = document.createElement('div');
+                    gbox.style.marginBottom = '10px';
+                    gbox.innerHTML = `<strong>Gas Suggestions:</strong>`;
+                    data.gasSuggestions.forEach(s => {
+                        const e = document.createElement('div');
+                        e.style.padding = '6px';
+                        e.style.marginTop = '6px';
+                        e.style.background = 'rgba(122,138,154,0.04)';
+                        e.style.borderRadius = '6px';
+                        e.innerHTML = `<div style="font-weight:700;color:#f5f7f9">${s.title}</div><div style="font-size:12px;color:#a8adb5">${s.description} Estimated savings: ${s.estimatedGasSavings || '-'} gas</div>`;
+                        gbox.appendChild(e);
+                    });
+                    analysisEl.appendChild(gbox);
+                }
+
+                if (data.callTree && data.callTree.length > 0) {
+                    const cbox = document.createElement('div');
+                    cbox.innerHTML = `<strong>Call Tree:</strong>`;
+                    function renderNode(node, indent = 0) {
+                        const d = document.createElement('div');
+                        d.style.marginLeft = (indent * 12) + 'px';
+                        d.style.fontFamily = 'monospace';
+                        d.style.color = '#a8adb5';
+                        d.textContent = `#${node.id} ${node.op} @ step ${node.step}`;
+                        cbox.appendChild(d);
+                        (node.children || []).forEach(ch => renderNode(ch, indent + 1));
+                    }
+                    data.callTree.forEach(n => renderNode(n));
+                    analysisEl.appendChild(cbox);
+                }
+            }
+
+            function selectStep(row, el) {
+                document.querySelectorAll('.step').forEach(e => e.classList.remove('active'));
+                el.classList.add('active');
+
+                detailEl.textContent = `op: ${row.op}\npc: ${row.pc}\ngas: ${row.gas}\ngasCost: ${row.gasCost}\ndepth: ${row.depth}`;
+                stackTopEl.textContent = row.stackTop ?? '(empty)';
+                stackTop3El.textContent = row.stackTop3?.join('\n') ?? '(empty)';
+
+                const counts = {};
+                const gasMap = {};
+                allRows.slice(0, row.step).forEach(r => {
+                    counts[r.op] = (counts[r.op] || 0) + 1;
+                    gasMap[r.op] = (gasMap[r.op] || 0) + r.gasCost;
+                });
+
+                const top5 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                chart.data.labels = top5.map(v => v[0]);
+                chart.data.datasets[0].backgroundColor = top5.map((_, i) => barColors[i % barColors.length]);
+                chart.data.datasets[0].data = top5.map(v => v[1]);
+                chart.update();
+            }
+        } catch (err) {
+            console.error('Error loading trace:', err);
+            stepsEl.innerHTML = `<div style="color:#ff9966;padding:16px">Error loading trace: ${err.message}</div>`;
+        }
+
+        // Load findings (async, independent of trace)
+        loadFindings();
+    }
+
+    main();
+</script>
+</body>
+</html>

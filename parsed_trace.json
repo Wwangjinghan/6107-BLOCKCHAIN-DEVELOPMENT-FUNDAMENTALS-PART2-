@@ -1,0 +1,357 @@
+{
+  "rows": [
+    {
+      "step": 0,
+      "pc": 2,
+      "op": "PUSH1",
+      "gas": 149990,
+      "gasCost": 10,
+      "depth": 1,
+      "stackTop": "148",
+      "stackTop3": [
+        "148"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 1,
+      "pc": 6,
+      "op": "PUSH1",
+      "gas": 149978,
+      "gasCost": 12,
+      "depth": 1,
+      "stackTop": "156",
+      "stackTop3": [
+        "156",
+        "148"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 2,
+      "pc": 8,
+      "op": "MSTORE",
+      "gas": 149972,
+      "gasCost": 6,
+      "depth": 1,
+      "stackTop": "(empty)",
+      "stackTop3": [],
+      "isStorage": false
+    },
+    {
+      "step": 3,
+      "pc": 9,
+      "op": "CALLDATASIZE",
+      "gas": 149955,
+      "gasCost": 17,
+      "depth": 1,
+      "stackTop": "36",
+      "stackTop3": [
+        "36"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 4,
+      "pc": 14,
+      "op": "ISZERO",
+      "gas": 149922,
+      "gasCost": 33,
+      "depth": 1,
+      "stackTop": "0",
+      "stackTop3": [
+        "0"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 5,
+      "pc": 19,
+      "op": "PUSH2",
+      "gas": 149905,
+      "gasCost": 17,
+      "depth": 1,
+      "stackTop": "1589",
+      "stackTop3": [
+        "1589",
+        "0"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 6,
+      "pc": 20,
+      "op": "JUMPI",
+      "gas": 149880,
+      "gasCost": 25,
+      "depth": 1,
+      "stackTop": "(empty)",
+      "stackTop3": [],
+      "isStorage": false
+    },
+    {
+      "step": 7,
+      "pc": 26,
+      "op": "CALLDATALOAD",
+      "gas": 149848,
+      "gasCost": 32,
+      "depth": 1,
+      "stackTop": "42",
+      "stackTop3": [
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 8,
+      "pc": 28,
+      "op": "PUSH1",
+      "gas": 149832,
+      "gasCost": 16,
+      "depth": 1,
+      "stackTop": "76",
+      "stackTop3": [
+        "76",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 9,
+      "pc": 32,
+      "op": "SLOAD",
+      "gas": 149803,
+      "gasCost": 29,
+      "depth": 1,
+      "stackTop": "0",
+      "stackTop3": [
+        "0",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 10,
+      "pc": 34,
+      "op": "DUP1",
+      "gas": 149775,
+      "gasCost": 28,
+      "depth": 1,
+      "stackTop": "0",
+      "stackTop3": [
+        "0",
+        "0",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 11,
+      "pc": 38,
+      "op": "PUSH1",
+      "gas": 149759,
+      "gasCost": 16,
+      "depth": 1,
+      "stackTop": "124",
+      "stackTop3": [
+        "124",
+        "0",
+        "0"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 12,
+      "pc": 39,
+      "op": "EQ",
+      "gas": 149725,
+      "gasCost": 34,
+      "depth": 1,
+      "stackTop": "0",
+      "stackTop3": [
+        "0",
+        "0",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 13,
+      "pc": 42,
+      "op": "ISZERO",
+      "gas": 149702,
+      "gasCost": 23,
+      "depth": 1,
+      "stackTop": "1",
+      "stackTop3": [
+        "1",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 14,
+      "pc": 43,
+      "op": "PUSH2",
+      "gas": 149669,
+      "gasCost": 33,
+      "depth": 1,
+      "stackTop": "9224",
+      "stackTop3": [
+        "9224",
+        "1",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 15,
+      "pc": 47,
+      "op": "JUMPI",
+      "gas": 149656,
+      "gasCost": 13,
+      "depth": 1,
+      "stackTop": "42",
+      "stackTop3": [
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 16,
+      "pc": 53,
+      "op": "PUSH1",
+      "gas": 149630,
+      "gasCost": 26,
+      "depth": 1,
+      "stackTop": "189",
+      "stackTop3": [
+        "189",
+        "42"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 17,
+      "pc": 56,
+      "op": "SWAP1",
+      "gas": 149599,
+      "gasCost": 31,
+      "depth": 1,
+      "stackTop": "42",
+      "stackTop3": [
+        "42",
+        "189"
+      ],
+      "isStorage": false
+    },
+    {
+      "step": 18,
+      "pc": 61,
+      "op": "SSTORE",
+      "gas": 149574,
+      "gasCost": 25,
+      "depth": 1,
+      "stackTop": "(empty)",
+      "stackTop3": [],
+      "isStorage": true
+    },
+    {
+      "step": 19,
+      "pc": 64,
+      "op": "LOG1",
+      "gas": 149561,
+      "gasCost": 13,
+      "depth": 1,
+      "stackTop": "(empty)",
+      "stackTop3": [],
+      "isStorage": false
+    },
+    {
+      "step": 20,
+      "pc": 67,
+      "op": "STOP",
+      "gas": 149533,
+      "gasCost": 28,
+      "depth": 1,
+      "stackTop": "(empty)",
+      "stackTop3": [],
+      "isStorage": false
+    }
+  ],
+  "topOps": [
+    {
+      "op": "PUSH1",
+      "count": 5,
+      "gasCostSum": 80
+    },
+    {
+      "op": "ISZERO",
+      "count": 2,
+      "gasCostSum": 56
+    },
+    {
+      "op": "PUSH2",
+      "count": 2,
+      "gasCostSum": 50
+    },
+    {
+      "op": "JUMPI",
+      "count": 2,
+      "gasCostSum": 38
+    },
+    {
+      "op": "EQ",
+      "count": 1,
+      "gasCostSum": 34
+    },
+    {
+      "op": "CALLDATALOAD",
+      "count": 1,
+      "gasCostSum": 32
+    },
+    {
+      "op": "SWAP1",
+      "count": 1,
+      "gasCostSum": 31
+    },
+    {
+      "op": "SLOAD",
+      "count": 1,
+      "gasCostSum": 29
+    },
+    {
+      "op": "DUP1",
+      "count": 1,
+      "gasCostSum": 28
+    },
+    {
+      "op": "STOP",
+      "count": 1,
+      "gasCostSum": 28
+    }
+  ],
+  "sstores": [
+    {
+      "step": 18,
+      "slot": "0x0",
+      "before": "0x0",
+      "after": "(empty)"
+    }
+  ],
+  "gasSuggestions": [
+    {
+      "title": "Reduce SSTORE usage",
+      "description": "You can reduce gas by minimizing SSTORE operations",
+      "estimatedGasSavings": 150
+    }
+  ],
+  "callTree": [
+    {
+      "id": 0,
+      "op": "SET",
+      "step": 20,
+      "children": []
+    }
+  ]
+}

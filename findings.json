@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "id": "VUL-0001",
+      "rule": "reentrancy",
+      "severity": "high",
+      "title": "Potential Reentrancy Vulnerability",
+      "description": "An external call is followed by state modifications (SSTORE). This pattern may permit reentrancy attacks if the external call can invoke functions that re-enter the contract.",
+      "evidence": {
+        "contractAddress": "0xcf0e485333e63c821964264e64b26ea1d1b8cd54",
+        "call_step": 5,
+        "sstore_step": 17
+      },
+      "recommendation": "Use checks-effects-interactions and reentrancy guards."
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "high": 1,
+    "medium": 0,
+    "low": 0,
+    "critical": 0
+  }
+}
